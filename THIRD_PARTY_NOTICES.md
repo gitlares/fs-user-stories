@@ -1,0 +1,15 @@
+# Third-party notices
+
+FS User Stories is distributed under the MIT License. Its bundled Rust core
+uses the following redistributable open-source components:
+
+- `git2-rs`: MIT OR Apache-2.0.
+- `libgit2` 1.9.6: GPL-2.0-only WITH GCC-exception-2.0. The linking exception
+  explicitly permits linking libgit2 with an independent module and
+  distributing the resulting executable under terms of our choice.
+- OpenSSL: Apache-2.0.
+- SQLite: public domain.
+
+The complete transitive Rust dependency versions are pinned in
+`Core/Cargo.lock`. Release packaging must retain the corresponding license
+texts and this notice.

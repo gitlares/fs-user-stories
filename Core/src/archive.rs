@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: MIT
+
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Component, Path},
+};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+use crate::protocol::CoreError;
+
+pub const ARCHIVE_DIRECTORY: &str = ".fs-user-stories";
+pub type AttachmentSources = BTreeMap<String, String>;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSnapshot {
+    pub format_version: u32,
+    pub project_id: String,
+    pub name: String,
+    pub prefix: String,
+    #[serde(default)]
+    pub actors: Vec<Value>,
+    #[serde(default)]
+    pub stories: Vec<Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectHeader<'a> {
+    format_version: u32,
+    project_id: &'a str,
+    name: &'a str,
+    prefix: &'a str,
+}
+
+impl ProjectSnapshot {
+    pub const FORMAT_VERSION: u32 = 1;
+
+    pub fn validate(&self) -> Result<(), CoreError> {
+        if self.format_version != Self::FORMAT_VERSION {
+            return Err(CoreError::UnsupportedArchive(self.format_version));
+        }
+        if self.project_id.trim().is_empty() || self.name.trim().is_empty() {
+            return Err(CoreError::InvalidArchive(
+                "Project identity is missing".into(),
+            ));
+        }
+        for entity in self.actors.iter().chain(self.stories.iter()) {
+            entity_id(entity)?;
+        }
+        Ok(())
+    }
+
+    pub fn digest(&self) -> Result<String, CoreError> {
+        self.validate()?;
+        let normalized = serde_json::to_vec(self)?;
+        Ok(hex::encode(Sha256::digest(normalized)))
+    }
+
+    pub fn write(&self, repository: &Path) -> Result<String, CoreError> {
+        self.write_with_attachments(repository, &AttachmentSources::new())
+    }
+
+    pub fn write_with_attachments(
+        &self,
+        repository: &Path,
+        attachment_sources: &AttachmentSources,
+    ) -> Result<String, CoreError> {
+        self.validate()?;
+        let root = repository.join(ARCHIVE_DIRECTORY);
+        let temporary = repository.join(format!("{ARCHIVE_DIRECTORY}.tmp"));
+        if temporary.exists() {
+            fs::remove_dir_all(&temporary)?;
+        }
+        fs::create_dir_all(temporary.join("profiles"))?;
+        fs::create_dir_all(temporary.join("stories"))?;
+
+        let header = ProjectHeader {
+            format_version: self.format_version,
+            project_id: &self.project_id,
+            name: &self.name,
+            prefix: &self.prefix,
+        };
+        write_json(&temporary.join("project.json"), &header)?;
+        write_entities(&temporary.join("profiles"), &self.actors)?;
+        write_entities(&temporary.join("stories"), &self.stories)?;
+        fs::write(temporary.join("README.md"), self.readme())?;
+        let existing_attachments = root.join("attachments");
+        if existing_attachments.exists() {
+            copy_directory(&existing_attachments, &temporary.join("attachments"))?;
+        }
+        for (relative_path, source_path) in attachment_sources {
+            let relative_path = safe_relative_path(relative_path)?;
+            let destination = temporary.join(relative_path);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(source_path, destination)?;
+        }
+
+        if root.exists() {
+            fs::remove_dir_all(&root)?;
+        }
+        fs::rename(temporary, root)?;
+        self.digest()
+    }
+
+    pub fn read(repository: &Path) -> Result<Self, CoreError> {
+        let root = repository.join(ARCHIVE_DIRECTORY);
+        let header: OwnedProjectHeader = read_json(&root.join("project.json"))?;
+        let snapshot = Self {
+            format_version: header.format_version,
+            project_id: header.project_id,
+            name: header.name,
+            prefix: header.prefix,
+            actors: read_entities(&root.join("profiles"))?,
+            stories: read_entities(&root.join("stories"))?,
+        };
+        snapshot.validate()?;
+        Ok(snapshot)
+    }
+
+    fn readme(&self) -> String {
+        format!(
+            "# {}\n\nFS User Stories project archive.\n\n- Prefix: `{}`\n- Profiles: {}\n- Stories: {}\n\nThe JSON files are the synchronized source of truth.\n",
+            self.name,
+            self.prefix,
+            self.actors.len(),
+            self.stories.len()
+        )
+    }
+}
+
+fn copy_directory(source: &Path, destination: &Path) -> Result<(), CoreError> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let destination_path = destination.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_directory(&entry.path(), &destination_path)?;
+        } else if entry.file_type()?.is_file() {
+            fs::copy(entry.path(), destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn safe_relative_path(value: &str) -> Result<&Path, CoreError> {
+    let path = Path::new(value);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(CoreError::InvalidArchive(
+            "Attachment path is unsafe".into(),
+        ));
+    }
+    Ok(path)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OwnedProjectHeader {
+    format_version: u32,
+    project_id: String,
+    name: String,
+    prefix: String,
+}
+
+fn entity_id(value: &Value) -> Result<&str, CoreError> {
+    value
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CoreError::InvalidArchive("Every entity requires an id".into()))
+}
+
+fn write_entities(directory: &Path, entities: &[Value]) -> Result<(), CoreError> {
+    let mut ordered = BTreeMap::new();
+    for entity in entities {
+        ordered.insert(entity_id(entity)?.to_owned(), entity);
+    }
+    for (id, entity) in ordered {
+        write_json(&directory.join(format!("{id}.json")), entity)?;
+    }
+    Ok(())
+}
+
+fn read_entities(directory: &Path) -> Result<Vec<Value>, CoreError> {
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+    let mut paths = fs::read_dir(directory)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.into_iter().map(|path| read_json(&path)).collect()
+}
+
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), CoreError> {
+    let mut bytes = serde_json::to_vec_pretty(value)?;
+    bytes.push(b'\n');
+    fs::write(path, bytes)?;
+    Ok(())
+}
+
+fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CoreError> {
+    if !path.exists() {
+        return Err(CoreError::ArchiveNotFound);
+    }
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn archive_round_trip_uses_one_file_per_entity() {
+        let directory = tempdir().unwrap();
+        let snapshot = ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![json!({"id": "actor", "name": "Developer"})],
+            stories: vec![json!({"id": "story", "title": "Login"})],
+        };
+        snapshot.write(directory.path()).unwrap();
+        assert!(
+            directory
+                .path()
+                .join(".fs-user-stories/profiles/actor.json")
+                .exists()
+        );
+        assert!(
+            directory
+                .path()
+                .join(".fs-user-stories/stories/story.json")
+                .exists()
+        );
+        assert_eq!(ProjectSnapshot::read(directory.path()).unwrap(), snapshot);
+    }
+}

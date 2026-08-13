@@ -1,48 +1,149 @@
 # FS User Stories
 
-**Fast & Simple User Stories**
+**Fucking Simple User Stories**
 
-FS User Stories es una aplicación local-first para crear y organizar historias de
-usuario sin la complejidad de una suite de gestión de proyectos.
+FS User Stories is a local-first application for creating and organizing user
+stories without the complexity of a full project management suite.
 
-La idea es ofrecer una experiencia sencilla para documentar requisitos, criterios
-de aceptación, comentarios y archivos adjuntos. Los datos se guardarán localmente
-y podrán compartirse de forma opcional, sin requerir una cuenta propia del
-servicio.
+It aims to provide a focused experience for documenting requirements, acceptance
+criteria, one notes field, and attachments. Data is stored locally and may be
+shared through Git, without requiring an FS User Stories account.
 
-## Estado del proyecto
+## Project status
 
-El proyecto se encuentra en etapa de planificación. Todavía no hay código de la
-aplicación.
+The macOS alpha is ready for team testing. It includes a native SwiftUI app,
+SQLite persistence, managed attachments, a local MCP server, and a bundled Rust
+core for Git synchronization.
 
-## Primera alpha
+## What the alpha does
 
-La primera versión alpha estará enfocada exclusivamente en macOS y funcionará de
-forma local. Incluirá:
+The first alpha release will target macOS and run entirely locally. It will
+include:
 
-- Una interfaz nativa para crear y administrar historias de usuario.
-- Un núcleo local encargado del dominio y la persistencia.
-- Un servidor MCP para que agentes autorizados puedan leer y editar historias.
-- Auditoría de los cambios realizados desde la aplicación o mediante MCP.
+- A native interface for creating and managing user stories.
+- SQLite persistence and managed local attachments.
+- A cross-platform Rust core for portable project archives and Git transport.
+- A loopback-only MCP server that allows local agents to read and edit stories.
+- One managed local repository per project.
+- Optional sharing through any compatible Git remote.
 
-La sincronización remota y las demás plataformas no forman parte de esta alpha.
+FS User Stories has no account system, telemetry, required cloud, subscriptions,
+sprints, estimates, assignees, deadlines, or dashboards.
 
-## Principios
+## Install the alpha
 
-- Funcionar sin conexión y sin una cuenta obligatoria.
-- Mantener los datos bajo el control del usuario.
-- Evitar procesos y funciones innecesarias.
-- Utilizar formatos abiertos y portables.
-- Mantener el proyecto como software de código abierto.
-- Usar únicamente dependencias que permitan redistribución comercial.
+Download the latest DMG from the repository's
+[Releases](https://github.com/gitlares/fs-user-stories/releases) page, open it,
+and drag **FS User Stories** to **Applications**.
 
-## Documentación
+The alpha currently targets Apple Silicon Macs. A signed and notarized build is
+required for normal Gatekeeper installation outside the Mac App Store.
 
-La propuesta inicial se encuentra en
+## Sharing and synchronization
+
+Every project receives a private managed repository inside the app's Application
+Support directory. The UI deliberately hides commits and branches: users only
+connect, share, join, and synchronize.
+
+- A remote is optional and may be hosted by GitHub, GitLab, or another Git host.
+- GitHub repositories can be created as private repositories from the app after
+  device authorization. The OAuth token is stored only in macOS Keychain.
+- SSH uses the user's existing local SSH agent. Public HTTPS remotes also work.
+- Invitations contain the project identity and remote address, never credentials.
+- Synchronization performs a three-way comparison per profile and story.
+- Changes to different items merge automatically. Changes to the same item ask
+  the user to choose **Keep Mine** or **Use Shared**.
+- Attachments remain subject to the app limits and are copied into the project
+  archive, so moving the original file does not break the story.
+- Every remote uses the reserved `fs-user-stories` branch. FS User Stories never
+  fetches, checks out, merges, pushes, force-pushes, or deletes `main`, `master`,
+  or another code branch. This makes connecting an existing code repository safe,
+  although a dedicated repository remains the clearest option.
+
+Creating a hosted remote and granting team access remain provider operations;
+FS User Stories does not pretend a QR code or invitation grants repository
+permissions.
+
+### GitHub account connection
+
+The official alpha includes the public Client ID for the FS User Stories OAuth
+App and never embeds a client secret. When a user chooses **Create on GitHub**,
+GitHub opens in the browser, asks the user to authorize their own account, and
+the app creates a private repository for that project.
+
+The app requests GitHub's `repo` OAuth scope because GitHub requires it to create
+and synchronize private repositories. The device flow opens GitHub in the user's
+browser, and the resulting token is stored as a device-only Keychain item. It is
+passed to the bundled core only through standard input for GitHub HTTPS requests
+and is never persisted in SQLite, project JSON, invitations, logs, or Git.
+
+## Architecture
+
+- `Sources/FSUserStoriesApp`: native macOS UI, application orchestration, SQLite,
+  attachment storage, and the local MCP transport.
+- `Core`: Rust domain archive, invitation, conflict merge, and libgit2 transport.
+- `.fs-user-stories`: portable per-project archive on the isolated
+  `fs-user-stories` branch, with one JSON file per profile and story, plus copied
+  attachments. SQLite is never added to the repository.
+
+The bundled core is a self-contained executable. End users do not need Rust,
+CMake, Git, Homebrew, or libgit2 installed.
+
+## Building
+
+Requirements for contributors:
+
+- Xcode 26 or newer.
+- Rust 1.97 or newer.
+- CMake, only to compile the vendored libgit2 dependency.
+
+Build the core, then the macOS app:
+
+```sh
+./Scripts/build-core.sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build
+```
+
+The repository currently carries the alpha Apple Silicon core binary used by
+Swift Package Manager. Release automation must build and verify each supported
+architecture before packaging.
+
+Create an unsigned local alpha package with:
+
+```sh
+./Scripts/package-alpha.sh
+```
+
+This produces `Distribution/FS User Stories.app` and
+`Distribution/FS-User-Stories-Alpha.dmg`. Signing and notarization are release
+owner actions and are performed separately with
+`Scripts/sign-and-notarize-alpha.sh`. See
+[`docs/releasing-macos-alpha.md`](./docs/releasing-macos-alpha.md) for the human
+release checklist.
+
+## Principles
+
+- Work offline without requiring an account.
+- Keep users in control of their data.
+- Avoid unnecessary processes and features.
+- Use open and portable formats.
+- Keep the project open source.
+- Use only dependencies that permit commercial redistribution.
+
+## Project language
+
+English is the default language for source code, documentation, issues, and pull
+requests. The app currently follows the user's system language in English and
+Spanish.
+
+## Documentation
+
+The detailed implementation plan is available as a Spanish draft in
 [`FS-User-Stories-Plan-de-Implementacion.md`](./FS-User-Stories-Plan-de-Implementacion.md).
 
-## Licencia
+## License
 
-El código de FS User Stories se distribuye bajo la [licencia MIT](./LICENSE).
-Esta licencia permite distribuir versiones gratuitas o de pago, incluida la
-aplicación oficial para iOS.
+FS User Stories is distributed under the [MIT License](./LICENSE). The license
+permits both free and paid distributions, including the official iOS app.
+See [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for bundled dependency
+licenses.

@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: MIT
+
+import SwiftUI
+
+struct WelcomeView: View {
+    let createProject: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.10))
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 29, weight: .medium))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.tint)
+                }
+                .frame(width: 64, height: 64)
+                .accessibilityHidden(true)
+
+                VStack(spacing: 10) {
+                    Text(L10n.string("Start with a project"))
+                        .font(.system(size: 28, weight: .semibold))
+                    Text(L10n.string("Create a focused space for your actors and user stories."))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: createProject) {
+                    Label(L10n.string("Create Project"), systemImage: "plus")
+                }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .keyboardShortcut("n", modifiers: .command)
+            }
+            .frame(maxWidth: 420)
+            .multilineTextAlignment(.center)
+            .padding(48)
+        }
+    }
+}

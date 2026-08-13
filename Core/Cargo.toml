@@ -1,0 +1,26 @@
+[package]
+name = "fs-user-stories-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Local, cross-platform core for FS User Stories"
+
+[lib]
+name = "fs_user_stories_core"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "fs-user-stories-core"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+git2 = { version = "0.21", default-features = false, features = ["https", "ssh", "vendored-libgit2", "vendored-openssl"] }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
