@@ -4,5 +4,6 @@
 Core/target/
 DerivedData/
 Distribution/
+Sources/FSUserStoriesApp/Resources/Core/fs-user-stories-core
 *.xcuserstate
 xcuserdata/

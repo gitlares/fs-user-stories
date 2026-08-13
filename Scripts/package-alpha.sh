@@ -9,8 +9,15 @@ distribution_dir="$project_dir/Distribution"
 app_name="FS User Stories"
 app_bundle="$distribution_dir/$app_name.app"
 dmg_path="$distribution_dir/FS-User-Stories-Alpha.dmg"
+core_source="$project_dir/Sources/FSUserStoriesApp/Resources/Core/fs-user-stories-core"
 
 cd "$project_dir"
+
+if [ ! -x "$core_source" ]; then
+    echo "The generated Rust core is missing." >&2
+    echo "Run Scripts/build-core.sh before packaging." >&2
+    exit 1
+fi
 
 swift build -c release
 binary_dir=$(swift build -c release --show-bin-path)

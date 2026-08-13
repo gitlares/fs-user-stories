@@ -8,26 +8,23 @@ project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 app_bundle="$project_dir/Distribution/FS User Stories.app"
 open_app=true
 run_tests=false
-rebuild_core=false
 
 usage() {
     cat <<'EOF'
-Usage: ./Scripts/build-and-run-local.sh [--test] [--rebuild-core] [--no-open]
+Usage: ./Scripts/build-and-run-local.sh [--test] [--no-open]
 
-Builds an unsigned local macOS application using the bundled Apple Silicon core.
+Builds the Rust core and an unsigned local macOS application entirely from source.
 
 Options:
-  --test          Run the Swift and Rust test suites before packaging.
-  --rebuild-core  Recompile the bundled Rust core (requires Rust and CMake).
-  --no-open       Build the application without opening it.
-  --help          Show this help message.
+  --test     Run the Swift and Rust test suites before packaging.
+  --no-open  Build the application without opening it.
+  --help     Show this help message.
 EOF
 }
 
 for argument in "$@"; do
     case "$argument" in
         --test) run_tests=true ;;
-        --rebuild-core) rebuild_core=true ;;
         --no-open) open_app=false ;;
         --help|-h) usage; exit 0 ;;
         *)
@@ -54,7 +51,7 @@ if [ -z "${DEVELOPER_DIR:-}" ] && [ -d "/Applications/Xcode.app/Contents/Develop
     export DEVELOPER_DIR
 fi
 
-for command_name in xcrun swift; do
+for command_name in xcrun swift cargo cmake; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "Missing required command: $command_name" >&2
         echo "See the Build from source section in README.md." >&2
@@ -64,26 +61,8 @@ done
 
 cd "$project_dir"
 
-if [ "$rebuild_core" = true ] || [ "$run_tests" = true ]; then
-    for command_name in cargo cmake; do
-        if ! command -v "$command_name" >/dev/null 2>&1; then
-            echo "Missing required command for Rust core development: $command_name" >&2
-            echo "See the Build from source section in README.md." >&2
-            exit 1
-        fi
-    done
-fi
-
-if [ "$rebuild_core" = true ]; then
-    echo "Building the bundled Rust core..."
-    "$script_dir/build-core.sh"
-elif [ ! -x "$project_dir/Sources/FSUserStoriesApp/Resources/Core/fs-user-stories-core" ]; then
-    echo "The bundled Apple Silicon core is missing." >&2
-    echo "Run this script with --rebuild-core after installing Rust and CMake." >&2
-    exit 1
-else
-    echo "Using the bundled Apple Silicon core."
-fi
+echo "Building the Rust core from source..."
+"$script_dir/build-core.sh"
 
 if [ "$run_tests" = true ]; then
     echo "Running Swift tests..."
