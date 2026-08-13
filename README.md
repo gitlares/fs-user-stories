@@ -15,6 +15,18 @@ servicio.
 El proyecto se encuentra en etapa de planificación. Todavía no hay código de la
 aplicación.
 
+## Primera alpha
+
+La primera versión alpha estará enfocada exclusivamente en macOS y funcionará de
+forma local. Incluirá:
+
+- Una interfaz nativa para crear y administrar historias de usuario.
+- Un núcleo local encargado del dominio y la persistencia.
+- Un servidor MCP para que agentes autorizados puedan leer y editar historias.
+- Auditoría de los cambios realizados desde la aplicación o mediante MCP.
+
+La sincronización remota y las demás plataformas no forman parte de esta alpha.
+
 ## Principios
 
 - Funcionar sin conexión y sin una cuenta obligatoria.

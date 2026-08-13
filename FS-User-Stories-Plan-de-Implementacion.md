@@ -1011,9 +1011,9 @@ Criterio de salida:
 - Reiniciar o cerrar durante una escritura no pierde ni corrompe datos.
 - Exportar, borrar e importar produce el mismo contenido.
 
-### Fase 2 — Aplicación macOS Alpha
+### Fase 2 — Aplicación macOS y MCP Alpha
 
-**Duración:** 4–5 semanas.
+**Duración:** 5–7 semanas.
 
 Entregables:
 
@@ -1025,11 +1025,17 @@ Entregables:
 - Actividad.
 - Copias y restauración.
 - Accesibilidad básica.
+- `fsus-mcp` mediante STDIO local.
+- Herramientas MCP para leer y editar historias.
+- Permisos de escritura por cliente y proyecto.
+- Auditoría de operaciones realizadas por agentes.
 
 Criterio de salida:
 
 - Un usuario no técnico puede crear un proyecto y cinco historias sin documentación.
 - Todas las funciones locales esenciales están disponibles gráficamente.
+- Un agente autorizado puede leer y editar las mismas historias con la interfaz cerrada.
+- Las escrituras de agentes requieren permiso explícito y quedan auditadas.
 
 ### Fase 3 — Sincronización GitHub Beta
 
@@ -1054,20 +1060,16 @@ Criterio de salida:
 - La aplicación continúa funcionando durante caída total de GitHub.
 - Ningún conflicto se resuelve destructivamente en silencio.
 
-### Fase 4 — MCP de escritorio
+### Fase 4 — Ampliación de MCP de escritorio
 
 **Duración:** 3–4 semanas.
 
 Entregables:
 
-- `fsus-mcp`.
-- STDIO.
 - Streamable HTTP local.
 - Recursos.
-- Herramientas de lectura.
-- Herramientas de escritura.
-- Permisos por proyecto/cliente.
-- Auditoría.
+- Ampliación y estabilización de herramientas.
+- Administración avanzada de permisos por proyecto/cliente.
 - Instalador/configurador para Codex.
 - Guía para Claude Code.
 
@@ -1168,9 +1170,9 @@ Criterio de salida:
 No se deben construir las cuatro interfaces simultáneamente desde el día uno.
 
 1. Núcleo Rust y pruebas.
-2. macOS como cliente de referencia.
+2. macOS como cliente de referencia con MCP local.
 3. Sincronización GitHub.
-4. MCP.
+4. Ampliación de MCP y Streamable HTTP.
 5. iOS/iPadOS pagado.
 6. Windows.
 7. Linux.
@@ -1181,7 +1183,7 @@ macOS debe validar primero el producto porque comparte SwiftUI y gran parte de l
 
 - Un desarrollador dedicado: aproximadamente 32–44 semanas para una 1.0 sólida en todas las plataformas.
 - Equipo de tres personas —núcleo, Apple y Windows/Linux—: aproximadamente 18–24 semanas.
-- MVP local macOS sin sincronización: 8–12 semanas después de cerrar prototipos.
+- Alpha local macOS con MCP y sin sincronización: 9–14 semanas después de cerrar prototipos.
 - Primera versión vendible iOS después del núcleo, macOS y sync: alrededor de 18–25 semanas con un desarrollador dedicado.
 
 Reducir estos tiempos implicaría disminuir plataformas o alcance, no eliminar pruebas de sincronización.
