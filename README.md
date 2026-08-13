@@ -1,0 +1,29 @@
+# FS User Stories
+
+**Fast & Simple User Stories**
+
+FS User Stories es una aplicación local-first para crear y organizar historias de
+usuario sin la complejidad de una suite de gestión de proyectos.
+
+La idea es ofrecer una experiencia sencilla para documentar requisitos, criterios
+de aceptación, comentarios y archivos adjuntos. Los datos se guardarán localmente
+y podrán compartirse de forma opcional, sin requerir una cuenta propia del
+servicio.
+
+## Estado del proyecto
+
+El proyecto se encuentra en etapa de planificación. Todavía no hay código de la
+aplicación.
+
+## Principios
+
+- Funcionar sin conexión y sin una cuenta obligatoria.
+- Mantener los datos bajo el control del usuario.
+- Evitar procesos y funciones innecesarias.
+- Utilizar formatos abiertos y portables.
+- Mantener el proyecto como software de código abierto.
+
+## Documentación
+
+La propuesta inicial se encuentra en
+[`FS-User-Stories-Plan-de-Implementacion.md`](./FS-User-Stories-Plan-de-Implementacion.md).
