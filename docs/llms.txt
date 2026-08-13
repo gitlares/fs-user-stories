@@ -1,0 +1,19 @@
+# FS User Stories
+
+FS User Stories is an open-source, local-first macOS application for writing and sharing user stories without the overhead of a project-management suite.
+
+## Official links
+
+- Homepage: https://gitlares.github.io/fs-user-stories/
+- Source: https://github.com/gitlares/fs-user-stories
+- Releases: https://github.com/gitlares/fs-user-stories/releases
+- License: https://github.com/gitlares/fs-user-stories/blob/docs/mit-license/LICENSE
+
+## Product facts
+
+- Projects, profiles, user stories, checkable acceptance criteria, one notes field, and managed attachments.
+- Exactly three story states: Draft, Active, and Completed.
+- Local SQLite persistence; no required account, cloud, telemetry, subscription, sprints, estimates, owners, deadlines, or dashboards.
+- Loopback-only MCP server for compatible local agents.
+- Optional Git sharing through a user-controlled remote and the isolated `fs-user-stories` branch.
+- The current alpha targets Apple Silicon Macs and is signed and notarized.

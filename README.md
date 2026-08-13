@@ -2,6 +2,10 @@
 
 **Fucking Simple User Stories**
 
+[Website](https://gitlares.github.io/fs-user-stories/) ·
+[Download](https://github.com/gitlares/fs-user-stories/releases) ·
+[Source](https://github.com/gitlares/fs-user-stories)
+
 FS User Stories is a local-first application for creating and organizing user
 stories without the complexity of a full project management suite.
 
