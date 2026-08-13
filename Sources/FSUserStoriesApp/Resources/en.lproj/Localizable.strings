@@ -134,6 +134,7 @@
 "This shared project is already on this Mac." = "This shared project is already on this Mac.";
 "Share Invitation…" = "Share Invitation…";
 "GitHub repository creation is not configured in this build." = "GitHub repository creation is not configured in this build.";
+"GitHub could not find an available repository name." = "GitHub could not find an available repository name.";
 "GitHub returned an invalid response." = "GitHub returned an invalid response.";
 "Waiting for GitHub authorization…" = "Waiting for GitHub authorization…";
 "The GitHub authorization code expired. Try again." = "The GitHub authorization code expired. Try again.";
@@ -142,6 +143,7 @@
 "Enter this code on GitHub" = "Enter this code on GitHub";
 "Waiting for authorization…" = "Waiting for authorization…";
 "Private by default. The token stays in Keychain." = "Private by default. The token stays in Keychain.";
+"Private by default. The token is stored in Keychain when available." = "Private by default. The token is stored in Keychain when available.";
 "Create on GitHub" = "Create on GitHub";
 "Authorizing…" = "Authorizing…";
 "Create Shared Repository" = "Create Shared Repository";
@@ -189,9 +191,18 @@
 "The managed local repository could not be created." = "The managed local repository could not be created.";
 "Preparing…" = "Preparing…";
 "Try Again" = "Try Again";
+"macOS could not access Keychain. Lock and unlock the login keychain in Keychain Access, then try again." = "macOS could not access Keychain. Lock and unlock the login keychain in Keychain Access, then try again.";
+"Keychain error: %@" = "Keychain error: %@";
 "Git is optional. Your project always remains available locally." = "Git is optional. Your project always remains available locally.";
 "Done" = "Done";
 "Share this project through any Git hosting provider." = "Share this project through any Git hosting provider.";
+"This is not a GitHub repository." = "This is not a GitHub repository.";
+"Connect your GitHub account before inviting a collaborator." = "Connect your GitHub account before inviting a collaborator.";
+"Invite a GitHub collaborator" = "Invite a GitHub collaborator";
+"They must accept GitHub's invitation before joining this private project." = "They must accept GitHub's invitation before joining this private project.";
+"GitHub username" = "GitHub username";
+"Invite" = "Invite";
+"GitHub invitation sent. Share the project invitation after it is accepted." = "GitHub invitation sent. Share the project invitation after it is accepted.";
 "Local copy" = "Local copy";
 "Managed Repository" = "Managed Repository";
 "Create an empty repository with your preferred provider, grant access to your collaborators, then paste its SSH or HTTPS URL here." = "Create an empty repository with your preferred provider, grant access to your collaborators, then paste its SSH or HTTPS URL here.";

@@ -26,6 +26,7 @@ codesign --force --options runtime --timestamp \
 
 codesign --force --options runtime --timestamp \
     --keychain "$FS_SIGNING_KEYCHAIN" \
+    --entitlements "$project_dir/Support/FSUserStories.entitlements" \
     --sign "$FS_SIGNING_IDENTITY" \
     "$app_bundle"
 

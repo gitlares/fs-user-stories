@@ -96,6 +96,24 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(invitation.localizedCaseInsensitiveContains("password"))
     }
 
+    func testSharedGitHubInvitationRequestsProviderAuthorization() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let core = try RustCoreClient()
+        let result = try core.execute([
+            "command": "create_invitation",
+            "project_id": UUID().uuidString,
+            "project_name": "Shared Example",
+            "remote_url": "https://github.com/example/shared-example.git",
+            "default_branch": "fs-user-stories"
+        ])
+        let invitation = try XCTUnwrap(result["invitation"] as? String)
+        let service = try GitSyncService(core: core, repositoriesRoot: root)
+
+        XCTAssertTrue(try service.invitationUsesGitHub(invitation))
+    }
+
     func testAnalyzeExistingProjectPromptIncludesCurrentProject() throws {
         let store = AppStore.preview
         let project = try XCTUnwrap(store.projects.first)

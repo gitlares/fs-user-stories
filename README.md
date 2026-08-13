@@ -118,8 +118,12 @@ share, join, and synchronize—rather than with commits or branches.
   Git host.
 - The app can connect an existing remote or create a private GitHub repository
   after browser-based Device Flow authorization.
-- The GitHub OAuth token is stored only in macOS Keychain and is never written to
-  SQLite, project JSON, invitations, logs, or Git.
+- The GitHub OAuth token is stored in macOS Keychain when available. Development
+  runs without Keychain entitlement keep it only in memory for that session. It
+  is never written to SQLite, project JSON, invitations, logs, or Git.
+- Repository owners can invite a GitHub collaborator by username from the app.
+  A new Mac authorizes its own GitHub account automatically while joining a
+  private GitHub project.
 - SSH remotes use the user's existing local SSH agent. Public HTTPS remotes work
   without credentials.
 - Share invitations contain the project identity and remote URL, never account
@@ -147,6 +151,17 @@ Homebrew, or libgit2 installed.
 
 This is an alpha intended for team testing. Back up important project data and
 [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
+
+### Test with two Macs
+
+1. On the first Mac, open **Share & Sync** and choose **Create on GitHub**.
+2. Enter the second person's GitHub username under **Invite a GitHub collaborator**.
+3. The collaborator accepts GitHub's repository invitation.
+4. On the first Mac, choose **Copy Invitation** or **Share Invitation…**.
+5. On the second Mac, choose **Join Shared Project** and paste the invitation.
+6. Authorize GitHub when the app opens Device Flow. No token is included in the
+   invitation.
+7. Make a change on either Mac and choose **Synchronize Now** on both Macs.
 
 ## Portable project format
 

@@ -206,6 +206,17 @@ struct GitSyncService: Sendable {
         return invitation
     }
 
+    func invitationUsesGitHub(_ invitation: String) throws -> Bool {
+        let result = try core.execute([
+            "command": "read_invitation",
+            "invitation": invitation.trimmingCharacters(in: .whitespacesAndNewlines)
+        ])
+        guard let remoteURL = result["remoteUrl"] as? String else {
+            throw RustCoreError.invalidResponse
+        }
+        return isGitHubURL(remoteURL)
+    }
+
     func join(invitation: String, accessToken: String? = nil) throws -> GitSynchronizationResult {
         let invitationResult = try core.execute([
             "command": "read_invitation",

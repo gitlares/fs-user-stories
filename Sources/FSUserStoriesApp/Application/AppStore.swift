@@ -29,6 +29,7 @@ final class AppStore {
     private let attachmentStorage: AttachmentStorage?
     private let gitSyncService: GitSyncService?
     private let gitHubService: GitHubService
+    @ObservationIgnored private var sessionGitHubAccessToken: String?
     @ObservationIgnored private var localMCPServer: LocalMCPServer?
 
     init(
@@ -68,6 +69,14 @@ final class AppStore {
 
     var gitHubRepositoryCreationIsConfigured: Bool {
         gitHubService.isConfigured
+    }
+
+    var gitHubIsAuthorized: Bool {
+        githubAccessToken() != nil
+    }
+
+    private func githubAccessToken() -> String? {
+        sessionGitHubAccessToken ?? (try? gitHubService.storedToken())
     }
 
     private func startMCPServer() {
@@ -232,7 +241,7 @@ final class AppStore {
                 attachmentURL(for: attachment).map { (attachment.id, $0) }
             }
         )
-        let accessToken = try? gitHubService.storedToken()
+        let accessToken = githubAccessToken()
         projectSyncState = .working
         do {
             let synchronization = try await Task.detached {
@@ -276,7 +285,7 @@ final class AppStore {
                 attachmentURL(for: attachment).map { (attachment.id, $0) }
             }
         )
-        let accessToken = try? gitHubService.storedToken()
+        let accessToken = githubAccessToken()
         projectSyncState = .working
         do {
             let synchronization = try await Task.detached {
@@ -335,6 +344,53 @@ final class AppStore {
         }
     }
 
+    func finishGitHubAuthorization(
+        _ authorization: GitHubDeviceAuthorization
+    ) async -> Result<Void, WorkspaceError> {
+        do {
+            sessionGitHubAccessToken = try await gitHubService.finishAuthorization(authorization)
+            return .success(())
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+    }
+
+    func sharedInvitationUsesGitHub(_ invitation: String) -> Result<Bool, WorkspaceError> {
+        guard let gitSyncService else {
+            return .failure(.persistenceFailure("The synchronization core is unavailable"))
+        }
+        do {
+            return .success(try gitSyncService.invitationUsesGitHub(invitation))
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+    }
+
+    func inviteGitHubCollaborator(
+        username: String,
+        projectID: UUID
+    ) async -> Result<Void, WorkspaceError> {
+        guard let project = projects.first(where: { $0.id == projectID }),
+              let remoteURL = project.gitRepository?.remoteURL else {
+            return .failure(.projectNotFound)
+        }
+        guard let token = githubAccessToken() else {
+            return .failure(
+                .persistenceFailure(L10n.string("Connect your GitHub account before inviting a collaborator."))
+            )
+        }
+        do {
+            try await gitHubService.inviteCollaborator(
+                username: username,
+                repositoryURL: remoteURL,
+                token: token
+            )
+            return .success(())
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+    }
+
     func finishGitHubRepositoryCreation(
         authorization: GitHubDeviceAuthorization,
         projectID: UUID
@@ -360,6 +416,7 @@ final class AppStore {
                 }.value
             }
             let token = try await gitHubService.finishAuthorization(authorization)
+            sessionGitHubAccessToken = token
             let repository = try await gitHubService.createPrivateRepository(
                 name: project.name,
                 token: token
@@ -438,7 +495,7 @@ final class AppStore {
             let synchronization = try gitSyncService.synchronize(
                 project,
                 attachmentURLs: attachmentURLs,
-                accessToken: try? gitHubService.storedToken()
+                accessToken: githubAccessToken()
             )
             projects[projectIndex] = try projectFromSynchronizedSnapshot(
                 synchronization.snapshot,
@@ -476,7 +533,7 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
-        let accessToken = try? gitHubService.storedToken()
+        let accessToken = githubAccessToken()
         projectSyncState = .working
         do {
             let synchronization = try await Task.detached {

@@ -15,6 +15,8 @@ struct GitSyncView: View {
     @State private var createdGitHubRepository: GitHubRepository?
     @State private var manualConnectionIsExpanded = false
     @State private var attemptedRepositoryPreparation = false
+    @State private var collaboratorUsername = ""
+    @State private var collaboratorInvitationSent = false
 
     private var project: FSProject? {
         store.projects.first { $0.id == projectID }
@@ -163,7 +165,7 @@ struct GitSyncView: View {
 
                     HStack {
                         Label(
-                            L10n.string("Private by default. The token stays in Keychain."),
+                            L10n.string("Private by default. The token is stored in Keychain when available."),
                             systemImage: "lock.shield"
                         )
                         .font(.caption)
@@ -259,6 +261,36 @@ struct GitSyncView: View {
                 }
                 LabeledContent(L10n.string("Last synchronized")) {
                     Text(link.lastSyncedAt?.formatted(date: .abbreviated, time: .shortened) ?? L10n.string("Not yet"))
+                }
+                if isGitHubURL(remoteURL) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(L10n.string("Invite a GitHub collaborator"))
+                            .font(.headline)
+                        Text(L10n.string("They must accept GitHub's invitation before joining this private project."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            TextField(L10n.string("GitHub username"), text: $collaboratorUsername)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit { inviteCollaborator(project) }
+                            Button(L10n.string("Invite")) {
+                                inviteCollaborator(project)
+                            }
+                            .disabled(
+                                collaboratorUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    || isWorking
+                            )
+                        }
+                        if collaboratorInvitationSent {
+                            Label(
+                                L10n.string("GitHub invitation sent. Share the project invitation after it is accepted."),
+                                systemImage: "checkmark.circle.fill"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        }
+                    }
                 }
                 if !store.pendingSyncConflicts.isEmpty {
                     Divider()
@@ -417,6 +449,29 @@ struct GitSyncView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func inviteCollaborator(_ project: FSProject) {
+        errorMessage = nil
+        collaboratorInvitationSent = false
+        Task {
+            switch await store.inviteGitHubCollaborator(
+                username: collaboratorUsername,
+                projectID: project.id
+            ) {
+            case .success:
+                collaboratorInvitationSent = true
+            case let .failure(error):
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func isGitHubURL(_ value: String) -> Bool {
+        let normalized = value.lowercased()
+        return normalized.hasPrefix("https://github.com/")
+            || normalized.hasPrefix("ssh://git@github.com/")
+            || normalized.hasPrefix("git@github.com:")
     }
 
     private func resolve(_ project: FSProject) {

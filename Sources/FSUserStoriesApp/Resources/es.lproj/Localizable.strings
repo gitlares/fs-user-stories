@@ -134,6 +134,7 @@
 "This shared project is already on this Mac." = "Este proyecto compartido ya está en esta Mac.";
 "Share Invitation…" = "Compartir invitación…";
 "GitHub repository creation is not configured in this build." = "La creación de repositorios en GitHub no está configurada en esta compilación.";
+"GitHub could not find an available repository name." = "GitHub no pudo encontrar un nombre de repositorio disponible.";
 "GitHub returned an invalid response." = "GitHub devolvió una respuesta inválida.";
 "Waiting for GitHub authorization…" = "Esperando autorización de GitHub…";
 "The GitHub authorization code expired. Try again." = "El código de autorización de GitHub expiró. Inténtalo de nuevo.";
@@ -142,6 +143,7 @@
 "Enter this code on GitHub" = "Ingresa este código en GitHub";
 "Waiting for authorization…" = "Esperando autorización…";
 "Private by default. The token stays in Keychain." = "Privado por defecto. El token permanece en Keychain.";
+"Private by default. The token is stored in Keychain when available." = "Privado por defecto. El token se guarda en Keychain cuando está disponible.";
 "Create on GitHub" = "Crear en GitHub";
 "Authorizing…" = "Autorizando…";
 "Create Shared Repository" = "Crear repositorio compartido";
@@ -189,9 +191,18 @@
 "The managed local repository could not be created." = "No se pudo crear el repositorio local administrado.";
 "Preparing…" = "Preparando…";
 "Try Again" = "Intentar de nuevo";
+"macOS could not access Keychain. Lock and unlock the login keychain in Keychain Access, then try again." = "macOS no pudo acceder al llavero. Bloquea y desbloquea el llavero de inicio de sesión en Acceso a Llaveros e inténtalo de nuevo.";
+"Keychain error: %@" = "Error del llavero: %@";
 "Git is optional. Your project always remains available locally." = "Git es opcional. Tu proyecto siempre permanece disponible localmente.";
 "Done" = "Listo";
 "Share this project through any Git hosting provider." = "Comparte este proyecto mediante cualquier proveedor de Git.";
+"This is not a GitHub repository." = "Este no es un repositorio de GitHub.";
+"Connect your GitHub account before inviting a collaborator." = "Conecta tu cuenta de GitHub antes de invitar a un colaborador.";
+"Invite a GitHub collaborator" = "Invitar a un colaborador de GitHub";
+"They must accept GitHub's invitation before joining this private project." = "Debe aceptar la invitación de GitHub antes de unirse a este proyecto privado.";
+"GitHub username" = "Usuario de GitHub";
+"Invite" = "Invitar";
+"GitHub invitation sent. Share the project invitation after it is accepted." = "Invitación de GitHub enviada. Comparte la invitación del proyecto después de que sea aceptada.";
 "Local copy" = "Copia local";
 "Managed Repository" = "Repositorio administrado";
 "Create an empty repository with your preferred provider, grant access to your collaborators, then paste its SSH or HTTPS URL here." = "Crea un repositorio vacío con tu proveedor preferido, concede acceso a tus colaboradores y pega aquí su URL SSH o HTTPS.";
