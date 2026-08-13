@@ -14,6 +14,7 @@ struct GitSyncView: View {
     @State private var githubAuthorization: GitHubDeviceAuthorization?
     @State private var createdGitHubRepository: GitHubRepository?
     @State private var manualConnectionIsExpanded = false
+    @State private var attemptedRepositoryPreparation = false
 
     private var project: FSProject? {
         store.projects.first { $0.id == projectID }
@@ -24,19 +25,17 @@ struct GitSyncView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     header
-                    if let project, let link = project.gitRepository {
-                        localRepository(link)
-                        if let connectedURL = link.remoteURL {
-                            connectedRepository(project, link: link, remoteURL: connectedURL)
+                    if let project {
+                        if let link = project.gitRepository {
+                            localRepository(link)
+                            if let connectedURL = link.remoteURL {
+                                connectedRepository(project, link: link, remoteURL: connectedURL)
+                            } else {
+                                connectRepository(project)
+                            }
                         } else {
-                            connectRepository(project)
+                            unavailableRepository(project)
                         }
-                    } else {
-                        ContentUnavailableView(
-                            L10n.string("Repository unavailable"),
-                            systemImage: "exclamationmark.triangle",
-                            description: Text(L10n.string("The managed local repository could not be created."))
-                        )
                     }
                     if let errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -59,6 +58,30 @@ struct GitSyncView: View {
             .padding(20)
         }
         .frame(width: 620, height: 570)
+    }
+
+    private func unavailableRepository(_ project: FSProject) -> some View {
+        ContentUnavailableView {
+            Label(L10n.string("Repository unavailable"), systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(L10n.string("The managed local repository could not be created."))
+        } actions: {
+            Button {
+                prepareRepository(project)
+            } label: {
+                Label(
+                    isWorking ? L10n.string("Preparing…") : L10n.string("Try Again"),
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .buttonStyle(.glassProminent)
+            .disabled(isWorking)
+        }
+        .onAppear {
+            guard !attemptedRepositoryPreparation else { return }
+            attemptedRepositoryPreparation = true
+            prepareRepository(project)
+        }
     }
 
     private var header: some View {
@@ -332,6 +355,15 @@ struct GitSyncView: View {
             case .success:
                 synchronize(project)
             case let .failure(error):
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func prepareRepository(_ project: FSProject) {
+        errorMessage = nil
+        Task {
+            if case let .failure(error) = await store.prepareManagedRepository(project.id) {
                 errorMessage = error.localizedDescription
             }
         }

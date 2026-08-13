@@ -146,10 +146,22 @@ final class AppStore {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
         let project = projects[projectIndex]
+        let attachmentURLs = Dictionary(
+            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
+                attachmentURL(for: attachment).map { (attachment.id, $0) }
+            }
+        )
         projectSyncState = .working
         do {
             let link = try await Task.detached {
-                try gitSyncService.connect(project, remoteURL: remoteURL)
+                var preparedProject = project
+                if preparedProject.gitRepository == nil {
+                    preparedProject.gitRepository = try gitSyncService.initialize(
+                        project,
+                        attachmentURLs: attachmentURLs
+                    )
+                }
+                return try gitSyncService.connect(preparedProject, remoteURL: remoteURL)
             }.value
             guard let currentIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
@@ -158,6 +170,40 @@ final class AppStore {
             guard persist() else {
                 throw WorkspaceError.persistenceFailure(
                     persistenceError ?? "The repository connection could not be saved"
+                )
+            }
+            projectSyncState = .idle
+            return .success(())
+        } catch {
+            projectSyncState = .failed(error.localizedDescription)
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+    }
+
+    func prepareManagedRepository(_ projectID: UUID) async -> Result<Void, WorkspaceError> {
+        guard let project = projects.first(where: { $0.id == projectID }) else {
+            return .failure(.projectNotFound)
+        }
+        guard let gitSyncService else {
+            return .failure(.persistenceFailure("The synchronization core is unavailable"))
+        }
+        let attachmentURLs = Dictionary(
+            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
+                attachmentURL(for: attachment).map { (attachment.id, $0) }
+            }
+        )
+        projectSyncState = .working
+        do {
+            let link = try await Task.detached {
+                try gitSyncService.initialize(project, attachmentURLs: attachmentURLs)
+            }.value
+            guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+                return .failure(.projectNotFound)
+            }
+            projects[projectIndex].gitRepository = link
+            guard persist() else {
+                throw WorkspaceError.persistenceFailure(
+                    persistenceError ?? "The managed repository could not be saved"
                 )
             }
             projectSyncState = .idle
@@ -302,20 +348,25 @@ final class AppStore {
         projectSyncState = .working
         do {
             let project = projects[projectIndex]
+            let attachmentURLs = Dictionary(
+                uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
+                    attachmentURL(for: attachment).map { (attachment.id, $0) }
+                }
+            )
+            var connectedProject = project
+            if connectedProject.gitRepository == nil {
+                connectedProject.gitRepository = try await Task.detached {
+                    try gitSyncService.initialize(project, attachmentURLs: attachmentURLs)
+                }.value
+            }
             let token = try await gitHubService.finishAuthorization(authorization)
             let repository = try await gitHubService.createPrivateRepository(
                 name: project.name,
                 token: token
             )
-            var connectedProject = project
             connectedProject.gitRepository = try gitSyncService.connect(
-                project,
+                connectedProject,
                 remoteURL: repository.cloneURL
-            )
-            let attachmentURLs = Dictionary(
-                uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                    attachmentURL(for: attachment).map { (attachment.id, $0) }
-                }
             )
             let synchronization = try await Task.detached {
                 try gitSyncService.synchronize(

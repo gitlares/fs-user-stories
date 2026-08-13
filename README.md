@@ -157,15 +157,17 @@ reviewable archive instead of copying the database:
 .fs-user-stories/
 ├── project.json
 ├── README.md
+├── profiles/
+│   └── <profile-id>.json
 ├── stories/
-│   └── APP-4-connect-a-local-agent.md
+│   └── <story-id>.json
 └── attachments/
     └── <story-id>/<managed-files>
 ```
 
-`project.json` is the versioned machine-readable snapshot used for deterministic
-synchronization. The generated project README and one Markdown document per story
-keep the repository immediately readable by people and language models.
+The project header and one JSON file per profile and story form the synchronized
+source of truth. This keeps diffs focused, conflicts small, and the data directly
+readable by language models. A generated README summarizes the project for people.
 Attachments are copied, size-limited, and verified by hash.
 
 ## Architecture

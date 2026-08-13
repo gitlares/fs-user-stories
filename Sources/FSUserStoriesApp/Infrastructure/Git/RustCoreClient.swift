@@ -93,6 +93,11 @@ struct CoreSyncConflict: Codable, Identifiable, Hashable, Sendable {
     var entityID: String
 
     var id: String { "\(entityType)-\(entityID)" }
+
+    enum CodingKeys: String, CodingKey {
+        case entityType
+        case entityID = "entityId"
+    }
 }
 
 struct GitSyncService: Sendable {
@@ -249,7 +254,7 @@ struct GitSyncService: Sendable {
             let parts = key.split(separator: "-", maxSplits: 1).map(String.init)
             return [
                 "entityType": parts.first ?? "",
-                "entityID": parts.count > 1 ? parts[1] : "",
+                "entityId": parts.count > 1 ? parts[1] : "",
                 "choice": useShared ? "shared" : "mine"
             ]
         }

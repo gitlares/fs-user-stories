@@ -187,6 +187,8 @@
 "Connect a shared repository first." = "Conecta primero un repositorio compartido.";
 "Repository unavailable" = "Repositorio no disponible";
 "The managed local repository could not be created." = "No se pudo crear el repositorio local administrado.";
+"Preparing…" = "Preparando…";
+"Try Again" = "Intentar de nuevo";
 "Git is optional. Your project always remains available locally." = "Git es opcional. Tu proyecto siempre permanece disponible localmente.";
 "Done" = "Listo";
 "Share this project through any Git hosting provider." = "Comparte este proyecto mediante cualquier proveedor de Git.";

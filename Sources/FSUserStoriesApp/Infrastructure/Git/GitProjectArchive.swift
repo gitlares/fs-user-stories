@@ -29,6 +29,15 @@ struct GitProjectSnapshot: Codable, Equatable, Sendable {
     var actors: [Actor]
     var stories: [Story]
 
+    enum CodingKeys: String, CodingKey {
+        case formatVersion
+        case projectID = "projectId"
+        case name
+        case prefix
+        case actors
+        case stories
+    }
+
     struct Actor: Codable, Equatable, Sendable {
         var id: UUID
         var name: String
@@ -47,6 +56,20 @@ struct GitProjectSnapshot: Codable, Equatable, Sendable {
         var attachments: [Attachment]
         var status: String
         var createdAt: Date
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case number
+            case title
+            case actorID = "actorId"
+            case want
+            case outcome
+            case notes
+            case acceptanceCriteria
+            case attachments
+            case status
+            case createdAt
+        }
     }
 
     struct Criterion: Codable, Equatable, Sendable {

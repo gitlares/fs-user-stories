@@ -6,6 +6,39 @@ import XCTest
 
 @MainActor
 final class MCPTests: XCTestCase {
+    @MainActor
+    func testConnectingRemoteRepairsMissingManagedRepository() async throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: "FSUserStories-GitRepair-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let project = FSProject(name: "Existing Project", prefix: "FIX")
+        XCTAssertNil(project.gitRepository)
+        let store = AppStore(
+            projects: [project],
+            gitSyncService: try GitSyncService(repositoriesRoot: temporaryRoot)
+        )
+
+        let result = await store.connectSharedRepository(
+            remoteURL: "https://github.com/example/fs-user-stories.git",
+            projectID: project.id
+        )
+
+        guard case .success = result else {
+            return XCTFail("The repository should be repaired and connected: \(result)")
+        }
+        let link = try XCTUnwrap(store.projects.first?.gitRepository)
+        XCTAssertEqual(link.remoteURL, "https://github.com/example/fs-user-stories.git")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: link.localPath))
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: URL(filePath: link.localPath).appending(path: ".git").path
+            )
+        )
+    }
+
     func testBundledGitHubOAuthClientIDIsConfigured() {
         XCTAssertTrue(GitHubService().isConfigured)
     }
