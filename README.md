@@ -34,8 +34,15 @@ La sincronización remota y las demás plataformas no forman parte de esta alpha
 - Evitar procesos y funciones innecesarias.
 - Utilizar formatos abiertos y portables.
 - Mantener el proyecto como software de código abierto.
+- Usar únicamente dependencias que permitan redistribución comercial.
 
 ## Documentación
 
 La propuesta inicial se encuentra en
 [`FS-User-Stories-Plan-de-Implementacion.md`](./FS-User-Stories-Plan-de-Implementacion.md).
+
+## Licencia
+
+El código de FS User Stories se distribuye bajo la [licencia MIT](./LICENSE).
+Esta licencia permite distribuir versiones gratuitas o de pago, incluida la
+aplicación oficial para iOS.

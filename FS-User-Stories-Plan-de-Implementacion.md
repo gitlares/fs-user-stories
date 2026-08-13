@@ -5,7 +5,7 @@
 **Nombre público:** FS User Stories  
 **Significado público:** Fast & Simple User Stories  
 **Filosofía interna:** Fucking Simple User Stories  
-**Licencia recomendada:** `MIT OR Apache-2.0`  
+**Licencia:** `MIT`
 **Modelo:** local-first, sin cuenta obligatoria, sin servidor propio y con GitHub opcional únicamente para compartir proyectos.
 
 ---
@@ -719,19 +719,23 @@ Estado, prioridad, etiquetas y relaciones estarán visibles pero sin dominar la 
 
 ### Código
 
-Licencia recomendada:
+Licencia del código propio:
 
 ```text
-MIT OR Apache-2.0
+MIT
 ```
 
 Cada archivo propio usará:
 
 ```text
-SPDX-License-Identifier: MIT OR Apache-2.0
+SPDX-License-Identifier: MIT
 ```
 
 ### Dependencias permitidas
+
+Toda dependencia debe permitir la redistribución comercial de FSUS y de sus
+aplicaciones oficiales, incluida una versión de pago para iOS. Se conservarán
+los avisos, atribuciones y demás condiciones exigidas por cada licencia.
 
 ```text
 MIT
@@ -780,7 +784,7 @@ El código será libre, pero el nombre, logotipo e iconos oficiales podrán rese
 
 ### Datos del usuario
 
-Las historias, comentarios y adjuntos siguen siendo propiedad de sus autores. Usar FSUS no los coloca bajo MIT/Apache.
+Las historias, comentarios y adjuntos siguen siendo propiedad de sus autores. Usar FSUS no los coloca bajo MIT.
 
 ---
 
@@ -900,8 +904,7 @@ fs-user-stories/
 │   └── linux/
 ├── schemas/
 ├── docs/
-├── LICENSE-MIT
-├── LICENSE-APACHE
+├── LICENSE
 └── THIRD_PARTY_NOTICES.md
 ```
 
@@ -1342,7 +1345,7 @@ FS User Stories 1.0 está terminado cuando:
 - Codex y Claude pueden leer y, con permiso, modificar historias en escritorio.
 - Toda acción de agentes queda auditada.
 - Los secretos permanecen en el almacén seguro del sistema.
-- No hay dependencias incompatibles con MIT/Apache.
+- No hay dependencias incompatibles con la licencia MIT ni con la distribución comercial.
 - Los binarios están firmados o empaquetados según cada plataforma.
 - La aplicación iOS está disponible como compra única.
 - La documentación explica claramente la propiedad de datos y la marca.
