@@ -211,11 +211,70 @@ macOS.
 
 ## Build from source
 
-Contributor requirements:
+The alpha currently supports only Apple Silicon Macs (M1 or newer) running
+macOS 26 or later. Building locally does not require an Apple Developer account,
+signing certificate, GitHub token, or FS User Stories account.
+
+### Requirements for the app
 
 - Xcode 26 or newer.
+- Git, for cloning the source and optional project synchronization.
+
+Install Xcode from the Mac App Store, open it once to finish installing its
+components, and make it the active developer directory if necessary:
+
+```sh
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+xcodebuild -version
+```
+
+The repository includes a precompiled Apple Silicon Rust core, so a normal local
+app build does not require Rust, CMake, Homebrew, or a separate libgit2 install.
+
+### Additional requirements for core development
+
+Only contributors changing the portable Rust/Git core or running its tests need:
+
 - Rust 1.97 or newer.
-- CMake, used only to compile the vendored libgit2 dependency.
+- CMake, used to compile the vendored libgit2 dependency.
+
+Install Rust with the official [rustup](https://rustup.rs/) installer. Install
+CMake with [Homebrew](https://brew.sh/) or another trusted package manager:
+
+```sh
+brew install cmake
+rustc --version
+cargo --version
+cmake --version
+```
+
+### One-command local build
+
+Clone the repository and run the local build helper:
+
+```sh
+git clone https://github.com/gitlares/fs-user-stories.git
+cd fs-user-stories
+./Scripts/build-and-run-local.sh
+```
+
+The script validates the Mac and Xcode, uses the bundled core, creates an unsigned
+local application and DMG under `Distribution`, and opens the app. Use
+`--no-open` to build without launching. Core contributors can use `--test` to run
+both suites or `--rebuild-core` to replace the bundled core with a local build:
+
+```sh
+./Scripts/build-and-run-local.sh --no-open
+./Scripts/build-and-run-local.sh --test --rebuild-core
+```
+
+Rebuilding the core takes longer the first time because Cargo compiles the
+vendored libgit2 and OpenSSL dependencies. Later builds reuse the local build
+cache. The resulting app is intended for use on the Mac that built it; share the
+official signed and notarized DMG with testers instead of redistributing this
+unsigned build.
+
+### Manual build
 
 Build the Rust core and then the macOS application:
 
@@ -236,6 +295,16 @@ Create an unsigned local application and DMG:
 ```sh
 ./Scripts/package-alpha.sh
 ```
+
+Local data is stored in:
+
+```text
+~/Library/Application Support/FS User Stories/
+```
+
+Removing the repository checkout does not remove that local application data.
+Do not delete the Application Support directory unless you intentionally want to
+remove every locally stored project and managed attachment.
 
 Signing and notarization are release-owner actions performed separately with
 `Scripts/sign-and-notarize-alpha.sh`. See
