@@ -270,6 +270,27 @@ generated Rust core, Swift build products, application bundle, and DMG are all
 ignored by Git. `Core/Cargo.lock` pins the complete Rust dependency graph so the
 source used by Cargo can be reviewed and reproduced.
 
+### Build transparency
+
+The application source, Rust core, build scripts, package metadata, OAuth client
+identifier, schemas, migrations, and dependency lockfile are public. The GitHub
+OAuth client identifier is intentionally included because Device Flow client IDs
+identify an application; they are not passwords or access tokens. Every user
+authorizes their own GitHub account, and credentials are never committed.
+
+Official downloads add a Developer ID signature and an Apple notarization ticket
+to the application built by these scripts. The release owner's private signing
+key is the only release input that cannot be public. Anyone can independently
+build the unsigned application and inspect an official download with:
+
+```sh
+codesign --verify --deep --strict --verbose=2 "/Applications/FS User Stories.app"
+spctl --assess --type execute --verbose=4 "/Applications/FS User Stories.app"
+```
+
+Release notes publish a SHA-256 checksum for the DMG so testers can verify the
+downloaded artifact with `shasum -a 256`.
+
 ### Manual build
 
 Build the Rust core and then the macOS application:
