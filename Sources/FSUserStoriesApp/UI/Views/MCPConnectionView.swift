@@ -71,7 +71,7 @@ struct MCPConnectionView: View {
 
             connectionRow(label: L10n.string("Transport"), value: "Streamable HTTP")
             connectionRow(label: L10n.string("Host"), value: "127.0.0.1")
-            connectionRow(label: L10n.string("Port"), value: "\(LocalMCPServer.defaultPort)")
+            connectionRow(label: L10n.string("Port"), value: "\(RustMCPServer.defaultPort)")
 
             Divider()
 

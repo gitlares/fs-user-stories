@@ -128,6 +128,14 @@
 "Status" = "Estado";
 "Stories" = "Historias";
 "Story" = "Historia";
+"Edit Project" = "Editar proyecto";
+"Project Options" = "Opciones del proyecto";
+"Danger Zone" = "Zona de peligro";
+"Delete Project…" = "Eliminar proyecto…";
+"Delete Project?" = "¿Eliminar proyecto?";
+"Delete Project" = "Eliminar proyecto";
+"Delete this project and all of its local stories, profiles, notes, and attachments." = "Elimina este proyecto y todas sus historias, perfiles, notas y adjuntos locales.";
+"This permanently deletes this project, its stories, profiles, notes, acceptance criteria, local attachments, and managed local Git repository. The remote repository is not deleted." = "Esto elimina permanentemente este proyecto, sus historias, perfiles, notas, criterios de aceptación, adjuntos locales y repositorio Git local administrado. El repositorio remoto no se elimina.";
 "Use an Invitation" = "Usar una invitación";
 "Connect Existing Repository" = "Conectar repositorio existente";
 "Open Shared Project" = "Abrir proyecto compartido";

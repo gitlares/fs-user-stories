@@ -2,7 +2,7 @@
 
 import Foundation
 
-struct ProjectActor: Identifiable, Hashable, Sendable {
+struct ProjectActor: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String
     var role: String
@@ -45,7 +45,7 @@ struct AcceptanceCriterion: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
-struct StoryAttachment: Identifiable, Hashable, Sendable {
+struct StoryAttachment: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var filename: String
     var contentType: String
@@ -73,7 +73,7 @@ struct StoryAttachment: Identifiable, Hashable, Sendable {
     }
 }
 
-struct UserStory: Identifiable, Hashable, Sendable {
+struct UserStory: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let number: Int
     var title: String
@@ -85,6 +85,11 @@ struct UserStory: Identifiable, Hashable, Sendable {
     var attachments: [StoryAttachment]
     var status: StoryStatus
     let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, number, title, want, outcome, notes, acceptanceCriteria, attachments, status, createdAt
+        case actorID = "actorId"
+    }
 
     init(
         id: UUID = UUID(),
@@ -124,7 +129,7 @@ extension UserStory {
     }
 }
 
-struct FSProject: Identifiable, Hashable, Sendable {
+struct FSProject: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     var name: String
     var prefix: String
@@ -149,12 +154,17 @@ struct FSProject: Identifiable, Hashable, Sendable {
     }
 }
 
-struct GitRepositoryLink: Hashable, Sendable {
+struct GitRepositoryLink: Codable, Hashable, Sendable {
     var localPath: String
     var remoteURL: String?
     var defaultBranch: String
     var lastSyncedDigest: String?
     var lastSyncedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case localPath, defaultBranch, lastSyncedDigest, lastSyncedAt
+        case remoteURL = "remoteUrl"
+    }
 
     init(
         localPath: String,

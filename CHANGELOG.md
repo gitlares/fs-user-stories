@@ -2,6 +2,36 @@
 
 All notable public changes to FS User Stories are documented here.
 
+## 0.1.0 Alpha 6 — 2026-08-14
+
+### Changed
+
+- Completed the portable-core migration: Rust now owns the authoritative
+  business rules, SQLite persistence, Markdown transfer, managed attachments,
+  Git/GitHub integration, synchronization policy, and MCP server/tools.
+- Reduced Swift to the native macOS interface and platform adapters for
+  SwiftUI/AppKit, Keychain, security-scoped file access, process lifecycle, and
+  background timers.
+- Project and story deletion now run as atomic stored-core operations, including
+  cleanup of their managed attachment and repository directories.
+- GitHub Device Flow, private-repository creation, collaborator invitations,
+  provider URL recognition, and API error handling now execute in Rust.
+
+### Fixed
+
+- Prevented the stories column from being resized below a usable native macOS
+  width.
+- Added appearance-specific transparent menu-bar artwork for reliable contrast
+  in both Light and Dark Mode.
+- Removed the legacy Swift MCP and Git archive implementations so there is no
+  alternate backend path or second project data representation.
+
+### Verified
+
+- 21 Rust tests and 7 Swift integration/UI-adapter tests pass.
+- Rust formatting and Clippy with warnings denied pass.
+- The bundled release core is rebuilt from the same reviewed source.
+
 ## 0.1.0 Alpha 5 — 2026-08-13
 
 ### Added

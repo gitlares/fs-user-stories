@@ -60,6 +60,97 @@ struct NewProjectSheet: View {
     }
 }
 
+struct EditProjectSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let project: FSProject
+    @State private var name: String
+    @State private var prefix: String
+    @State private var confirmsDeletion = false
+    @FocusState private var focusedField: Field?
+
+    let onSave: (String, String) -> Void
+    let onDelete: () -> Void
+
+    private enum Field {
+        case name
+        case prefix
+    }
+
+    init(
+        project: FSProject,
+        onSave: @escaping (String, String) -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        self.project = project
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _name = State(initialValue: project.name)
+        _prefix = State(initialValue: project.prefix)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text(L10n.string("Edit Project"))
+                .font(.title2.bold())
+
+            Form {
+                TextField(L10n.string("Project name"), text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .name)
+                TextField(L10n.string("Story prefix"), text: $prefix)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .prefix)
+                    .textCase(.uppercase)
+            }
+            .formStyle(.grouped)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.string("Danger Zone"))
+                    .font(.headline)
+                Text(L10n.string("Delete this project and all of its local stories, profiles, notes, and attachments."))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button(L10n.string("Delete Project…"), role: .destructive) {
+                    confirmsDeletion = true
+                }
+            }
+
+            HStack {
+                Button(L10n.string("Cancel")) { dismiss() }
+                Spacer()
+                Button(L10n.string("Save Changes")) { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!isValid)
+            }
+        }
+        .padding(24)
+        .frame(width: 500)
+        .onAppear { focusedField = .name }
+        .alert(L10n.string("Delete Project?"), isPresented: $confirmsDeletion) {
+            Button(L10n.string("Delete Project"), role: .destructive) {
+                onDelete()
+                dismiss()
+            }
+            Button(L10n.string("Cancel"), role: .cancel) { }
+        } message: {
+            Text(L10n.string("This permanently deletes this project, its stories, profiles, notes, acceptance criteria, local attachments, and managed local Git repository. The remote repository is not deleted."))
+        }
+    }
+
+    private var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !prefix.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func save() {
+        guard isValid else { return }
+        onSave(name, prefix)
+        dismiss()
+    }
+}
+
 struct NewActorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String

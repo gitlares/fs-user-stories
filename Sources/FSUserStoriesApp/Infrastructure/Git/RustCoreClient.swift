@@ -6,6 +6,7 @@ enum RustCoreError: LocalizedError {
     case executableMissing
     case invalidResponse
     case commandFailed(String)
+    case coreFailure(code: String, message: String)
     case syncConflicts([CoreSyncConflict])
 
     var errorDescription: String? {
@@ -16,6 +17,8 @@ enum RustCoreError: LocalizedError {
             "The FS User Stories core returned an invalid response."
         case let .commandFailed(message):
             message
+        case let .coreFailure(_, message):
+            message
         case .syncConflicts:
             L10n.string("Some shared changes need your decision.")
         }
@@ -23,7 +26,7 @@ enum RustCoreError: LocalizedError {
 }
 
 struct RustCoreClient: Sendable {
-    private let executableURL: URL
+    let executableURL: URL
 
     init(executableURL: URL? = nil) throws {
         if let executableURL {
@@ -80,8 +83,9 @@ struct RustCoreClient: Sendable {
                     try JSONDecoder().decode([CoreSyncConflict].self, from: data)
                 )
             }
-            throw RustCoreError.commandFailed(
-                error?["message"] as? String ?? L10n.string("Synchronization failed")
+            throw RustCoreError.coreFailure(
+                code: error?["code"] as? String ?? "core_error",
+                message: error?["message"] as? String ?? L10n.string("Synchronization failed")
             )
         }
         return response["result"] as? [String: Any] ?? [:]
@@ -103,6 +107,8 @@ struct CoreSyncConflict: Codable, Identifiable, Hashable, Sendable {
 struct GitSyncService: Sendable {
     private let core: RustCoreClient
     private let repositoriesRoot: URL
+
+    var managedRepositoriesRootURL: URL { repositoriesRoot }
 
     init(
         core: RustCoreClient? = nil,
@@ -128,65 +134,82 @@ struct GitSyncService: Sendable {
         )
     }
 
-    func initialize(_ project: FSProject, attachmentURLs: [UUID: URL]) throws -> GitRepositoryLink {
-        let repositoryURL = repositoryURL(for: project.id)
-        let result = try core.execute(
-            command(
-                named: "create_repository",
-                project: project,
-                repositoryURL: repositoryURL,
-                attachmentURLs: attachmentURLs
-            )
-        )
-        return GitRepositoryLink(
-            localPath: repositoryURL.path,
-            lastSyncedDigest: result["digest"] as? String
-        )
-    }
-
-    func connect(_ project: FSProject, remoteURL: String) throws -> GitRepositoryLink {
-        guard var link = project.gitRepository else {
-            throw RustCoreError.commandFailed(L10n.string("The local repository is not ready."))
-        }
-        _ = try core.execute([
-            "command": "connect_remote",
-            "repository_path": link.localPath,
-            "remote_url": remoteURL
-        ])
-        link.remoteURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        return link
-    }
-
-    func synchronize(
-        _ project: FSProject,
-        attachmentURLs: [UUID: URL],
+    func synchronizeStored(
+        projectID: UUID,
+        databaseURL: URL,
+        attachmentsRootURL: URL,
         accessToken: String? = nil
-    ) throws -> GitSynchronizationResult {
-        guard var link = project.gitRepository, link.remoteURL != nil else {
-            throw RustCoreError.commandFailed(L10n.string("Connect a shared repository first."))
-        }
-        var syncCommand = try command(
-                named: "synchronize",
-                project: project,
-                repositoryURL: URL(filePath: link.localPath, directoryHint: .isDirectory),
-                attachmentURLs: attachmentURLs
-            )
-        if isGitHubURL(link.remoteURL), let accessToken {
-            syncCommand["access_token"] = accessToken
-        }
-        let result = try core.execute(syncCommand)
-        link.lastSyncedDigest = result["digest"] as? String
-        link.lastSyncedAt = .now
-        guard let snapshotObject = result["snapshot"] else {
-            throw RustCoreError.invalidResponse
-        }
-        let data = try JSONSerialization.data(withJSONObject: snapshotObject)
+    ) throws -> FSProject {
+        var command: [String: Any] = [
+            "command": "synchronize_stored_project",
+            "database_path": databaseURL.path,
+            "attachments_root": attachmentsRootURL.path,
+            "project_id": projectID.uuidString
+        ]
+        if let accessToken { command["access_token"] = accessToken }
+        let result = try core.execute(command)
+        guard let project = result["project"] else { throw RustCoreError.invalidResponse }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return GitSynchronizationResult(
-            link: link,
-            snapshot: try decoder.decode(GitProjectSnapshot.self, from: data)
+        return try decoder.decode(
+            FSProject.self,
+            from: JSONSerialization.data(withJSONObject: project)
         )
+    }
+
+    func initializeStored(
+        projectID: UUID,
+        databaseURL: URL,
+        attachmentsRootURL: URL
+    ) throws -> FSProject {
+        try storedProjectResult([
+            "command": "initialize_stored_project_repository",
+            "database_path": databaseURL.path,
+            "attachments_root": attachmentsRootURL.path,
+            "project_id": projectID.uuidString,
+            "repository_path": repositoryURL(for: projectID).path
+        ])
+    }
+
+    func connectStored(
+        projectID: UUID,
+        databaseURL: URL,
+        attachmentsRootURL: URL,
+        remoteURL: String
+    ) throws -> FSProject {
+        try storedProjectResult([
+            "command": "connect_stored_project_repository",
+            "database_path": databaseURL.path,
+            "attachments_root": attachmentsRootURL.path,
+            "project_id": projectID.uuidString,
+            "remote_url": remoteURL
+        ])
+    }
+
+    func resolveStoredSynchronization(
+        projectID: UUID,
+        choices: [String: Bool],
+        databaseURL: URL,
+        attachmentsRootURL: URL,
+        accessToken: String? = nil
+    ) throws -> FSProject {
+        let resolutions = choices.map { key, useShared -> [String: Any] in
+            let parts = key.split(separator: "-", maxSplits: 1).map(String.init)
+            return [
+                "entityType": parts.first ?? "",
+                "entityId": parts.count > 1 ? parts[1] : "",
+                "choice": useShared ? "shared" : "mine"
+            ]
+        }
+        var command: [String: Any] = [
+            "command": "resolve_stored_project_synchronization",
+            "database_path": databaseURL.path,
+            "attachments_root": attachmentsRootURL.path,
+            "project_id": projectID.uuidString,
+            "resolutions": resolutions
+        ]
+        if let accessToken { command["access_token"] = accessToken }
+        return try storedProjectResult(command)
     }
 
     func invitation(for project: FSProject) throws -> String {
@@ -214,196 +237,71 @@ struct GitSyncService: Sendable {
         guard let remoteURL = result["remoteUrl"] as? String else {
             throw RustCoreError.invalidResponse
         }
-        return isGitHubURL(remoteURL)
+        return try remoteUsesGitHub(remoteURL)
     }
 
-    func remoteUsesGitHub(_ remoteURL: String) -> Bool {
-        isGitHubURL(remoteURL.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-
-    func join(invitation: String, accessToken: String? = nil) throws -> GitSynchronizationResult {
+    func joinStored(
+        invitation: String,
+        databaseURL: URL,
+        attachmentsRootURL: URL,
+        accessToken: String? = nil
+    ) throws -> FSProject {
         let invitationResult = try core.execute([
             "command": "read_invitation",
             "invitation": invitation.trimmingCharacters(in: .whitespacesAndNewlines)
         ])
-        guard
-            let projectIDValue = invitationResult["projectId"] as? String,
-            let projectID = UUID(uuidString: projectIDValue),
-            let remoteURL = invitationResult["remoteUrl"] as? String
-        else {
+        guard let remoteURL = invitationResult["remoteUrl"] as? String else {
             throw RustCoreError.invalidResponse
         }
-        let repositoryURL = repositoryURL(for: projectID)
-        var cloneCommand: [String: Any] = [
-            "command": "clone_shared",
-            "repository_path": repositoryURL.path,
-            "remote_url": remoteURL
-        ]
-        if isGitHubURL(remoteURL), let accessToken {
-            cloneCommand["access_token"] = accessToken
-        }
-        let result = try core.execute(cloneCommand)
-        let link = GitRepositoryLink(
-            localPath: repositoryURL.path,
+        return try joinStored(
             remoteURL: remoteURL,
-            defaultBranch: invitationResult["defaultBranch"] as? String ?? "fs-user-stories",
-            lastSyncedAt: .now
+            databaseURL: databaseURL,
+            attachmentsRootURL: attachmentsRootURL,
+            accessToken: accessToken
         )
-        let wrappedResult: [String: Any] = [
-            "snapshot": result,
-            "digest": NSNull()
-        ]
-        return try synchronizationResult(wrappedResult, link: link)
     }
 
-    func join(remoteURL: String, accessToken: String? = nil) throws -> GitSynchronizationResult {
-        let normalizedRemoteURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let temporaryRepositoryURL = repositoriesRoot.appending(
-            path: "Import-\(UUID().uuidString)",
-            directoryHint: .isDirectory
-        )
-
-        do {
-            var cloneCommand: [String: Any] = [
-                "command": "clone_shared",
-                "repository_path": temporaryRepositoryURL.path,
-                "remote_url": normalizedRemoteURL
-            ]
-            if isGitHubURL(normalizedRemoteURL), let accessToken {
-                cloneCommand["access_token"] = accessToken
-            }
-            let snapshotObject = try core.execute(cloneCommand)
-            let data = try JSONSerialization.data(withJSONObject: snapshotObject)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let snapshot = try decoder.decode(GitProjectSnapshot.self, from: data)
-            let finalRepositoryURL = repositoryURL(for: snapshot.projectID)
-
-            if FileManager.default.fileExists(atPath: finalRepositoryURL.path) {
-                throw RustCoreError.commandFailed(
-                    L10n.string("This shared project is already on this Mac.")
-                )
-            }
-            try FileManager.default.moveItem(at: temporaryRepositoryURL, to: finalRepositoryURL)
-
-            return GitSynchronizationResult(
-                link: GitRepositoryLink(
-                    localPath: finalRepositoryURL.path,
-                    remoteURL: normalizedRemoteURL,
-                    defaultBranch: "fs-user-stories",
-                    lastSyncedAt: .now
-                ),
-                snapshot: snapshot
-            )
-        } catch {
-            try? FileManager.default.removeItem(at: temporaryRepositoryURL)
-            throw error
-        }
-    }
-
-    func resolveSynchronization(
-        _ project: FSProject,
-        choices: [String: Bool],
-        attachmentURLs: [UUID: URL],
+    func joinStored(
+        remoteURL: String,
+        databaseURL: URL,
+        attachmentsRootURL: URL,
         accessToken: String? = nil
-    ) throws -> GitSynchronizationResult {
-        guard var link = project.gitRepository else {
-            throw RustCoreError.commandFailed(L10n.string("The local repository is not ready."))
-        }
-        let resolutions = choices.map { key, useShared -> [String: Any] in
-            let parts = key.split(separator: "-", maxSplits: 1).map(String.init)
-            return [
-                "entityType": parts.first ?? "",
-                "entityId": parts.count > 1 ? parts[1] : "",
-                "choice": useShared ? "shared" : "mine"
-            ]
-        }
-        let attachmentSources = attachmentSourcePaths(
-            project: project,
-            attachmentURLs: attachmentURLs
-        )
-        var resolveCommand: [String: Any] = [
-            "command": "resolve_synchronization",
-            "repository_path": link.localPath,
-            "resolutions": resolutions,
-            "attachment_sources": attachmentSources
+    ) throws -> FSProject {
+        var command: [String: Any] = [
+            "command": "join_stored_project",
+            "database_path": databaseURL.path,
+            "attachments_root": attachmentsRootURL.path,
+            "repositories_root": repositoriesRoot.path,
+            "remote_url": remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
         ]
-        if isGitHubURL(link.remoteURL), let accessToken {
-            resolveCommand["access_token"] = accessToken
+        if let accessToken { command["access_token"] = accessToken }
+        return try storedProjectResult(command)
+    }
+
+    func remoteUsesGitHub(_ remoteURL: String) throws -> Bool {
+        let result = try core.execute([
+            "command": "remote_uses_git_hub",
+            "remote_url": remoteURL
+        ])
+        guard let usesGitHub = result["usesGitHub"] as? Bool else {
+            throw RustCoreError.invalidResponse
         }
-        let result = try core.execute(resolveCommand)
-        link.lastSyncedDigest = result["digest"] as? String
-        link.lastSyncedAt = .now
-        return try synchronizationResult(result, link: link)
+        return usesGitHub
     }
 
     private func repositoryURL(for projectID: UUID) -> URL {
         repositoriesRoot.appending(path: projectID.uuidString, directoryHint: .isDirectory)
     }
 
-    private func command(
-        named name: String,
-        project: FSProject,
-        repositoryURL: URL,
-        attachmentURLs: [UUID: URL]
-    ) throws -> [String: Any] {
-        let archive = GitProjectArchive()
-        let snapshot = archive.snapshot(for: project)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let snapshotObject = try JSONSerialization.jsonObject(with: encoder.encode(snapshot))
-        let attachmentSources = attachmentSourcePaths(
-            project: project,
-            attachmentURLs: attachmentURLs
-        )
-        return [
-            "command": name,
-            "repository_path": repositoryURL.path,
-            "snapshot": snapshotObject,
-            "attachment_sources": attachmentSources
-        ]
-    }
-
-    private func attachmentSourcePaths(
-        project: FSProject,
-        attachmentURLs: [UUID: URL]
-    ) -> [String: String] {
-        let archive = GitProjectArchive()
-        var attachmentSources: [String: String] = [:]
-        for story in project.stories {
-            for attachment in story.attachments {
-                guard let sourceURL = attachmentURLs[attachment.id] else { continue }
-                attachmentSources[archive.archivePath(storyID: story.id, attachment: attachment)] = sourceURL.path
-            }
-        }
-        return attachmentSources
-    }
-
-    private func synchronizationResult(
-        _ result: [String: Any],
-        link: GitRepositoryLink
-    ) throws -> GitSynchronizationResult {
-        guard let snapshotObject = result["snapshot"] else {
-            throw RustCoreError.invalidResponse
-        }
-        let data = try JSONSerialization.data(withJSONObject: snapshotObject)
+    private func storedProjectResult(_ command: [String: Any]) throws -> FSProject {
+        let result = try core.execute(command)
+        guard let project = result["project"] else { throw RustCoreError.invalidResponse }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return GitSynchronizationResult(
-            link: link,
-            snapshot: try decoder.decode(GitProjectSnapshot.self, from: data)
+        return try decoder.decode(
+            FSProject.self,
+            from: JSONSerialization.data(withJSONObject: project)
         )
     }
 
-    private func isGitHubURL(_ value: String?) -> Bool {
-        guard let value = value?.lowercased() else { return false }
-        return value.hasPrefix("https://github.com/")
-            || value.hasPrefix("ssh://git@github.com/")
-            || value.hasPrefix("git@github.com:")
-    }
-}
-
-struct GitSynchronizationResult: Sendable {
-    var link: GitRepositoryLink
-    var snapshot: GitProjectSnapshot
 }

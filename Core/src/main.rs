@@ -1,10 +1,25 @@
 // SPDX-License-Identifier: MIT
 
-use std::io::{self, Read};
+use std::{
+    env,
+    io::{self, Read},
+};
 
 use fs_user_stories_core::{Command, Response, execute};
 
 fn main() {
+    let arguments = env::args().skip(1).collect::<Vec<_>>();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "--mcp-server")
+    {
+        if let Err(error) = fs_user_stories_core::mcp_server::run_from_arguments(&arguments) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let mut input = String::new();
     if let Err(error) = io::stdin().read_to_string(&mut input) {
         print_response(Response::error("input_error", error.to_string()));

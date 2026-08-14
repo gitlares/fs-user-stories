@@ -47,10 +47,8 @@ final class ProjectSyncScheduler {
     private var followUpIDs = Set<UUID>()
     private var runningProjectID: UUID?
     private var worker: Task<Void, Never>?
-    private var inactiveCursor = 0
-    private var failureCounts: [UUID: Int] = [:]
-    private var firstLocalChangeAt: [UUID: Date] = [:]
-    private var activeProjectTask: Task<Void, Never>?
+    private let rustPlanner = RustSyncPlannerClient()
+    private var rustPlannerState = RustSyncPlannerClient.State()
 
     init(
         policy: Policy = .production,
@@ -61,38 +59,15 @@ final class ProjectSyncScheduler {
     }
 
     func recordLocalChange(for projectID: UUID) {
-        let now = Date.now
-        let firstChange = firstLocalChangeAt[projectID] ?? now
-        firstLocalChangeAt[projectID] = firstChange
-
-        // Keep batching rapid edits, but never postpone a publish forever for a
-        // continuously edited project.
-        let remaining = max(0, policy.maximumLocalChangeDelay - now.timeIntervalSince(firstChange))
-        let debounce = min(policy.localChangeDebounce, .milliseconds(Int64(remaining * 1_000)))
-        schedule(projectID, after: debounce, replacingExistingDelay: true)
+        applyRustPlan(event: "local_change", projectID: projectID, projects: [], activeID: nil, replacingExistingDelay: true)
     }
 
     func requestImmediateSync(for projectID: UUID) {
-        schedule(projectID, after: .zero, replacingExistingDelay: true)
+        applyRustPlan(event: "immediate", projectID: projectID, projects: [], activeID: nil, replacingExistingDelay: true)
     }
 
     func projectBecameActive(_ project: FSProject, now: Date = .now) {
-        guard project.gitRepository?.remoteURL != nil else { return }
-        guard isDue(project.gitRepository?.lastSyncedAt, interval: policy.activeProjectRefresh, now: now) else {
-            return
-        }
-        let activationDebounce = policy.activeProjectActivationDebounce
-        activeProjectTask?.cancel()
-        activeProjectTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: activationDebounce)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled, let self else { return }
-            activeProjectTask = nil
-            schedule(project.id, after: .zero, replacingExistingDelay: false)
-        }
+        applyRustPlan(event: "active", projectID: project.id, projects: [project], activeID: project.id, replacingExistingDelay: false, now: now)
     }
 
     /// Schedules the active project first and at most one inactive project per
@@ -103,27 +78,23 @@ final class ProjectSyncScheduler {
         inactiveProjects: [FSProject],
         now: Date = .now
     ) {
-        if let activeProject {
-            projectBecameActive(activeProject, now: now)
-        }
-
-        let eligibleInactive = inactiveProjects.filter {
-            $0.gitRepository?.remoteURL != nil && isDue(
-                $0.gitRepository?.lastSyncedAt,
-                interval: policy.inactiveProjectRefresh,
-                now: now
-            )
-        }
-        guard !eligibleInactive.isEmpty else { return }
-
-        let index = inactiveCursor % eligibleInactive.count
-        inactiveCursor = (inactiveCursor + 1) % eligibleInactive.count
-        schedule(eligibleInactive[index].id, after: .zero, replacingExistingDelay: false)
+        applyRustPlan(event: "maintenance", projectID: nil, projects: (activeProject.map { [$0] } ?? []) + inactiveProjects, activeID: activeProject?.id, replacingExistingDelay: false, now: now)
     }
 
-    private func isDue(_ lastSyncedAt: Date?, interval: TimeInterval, now: Date) -> Bool {
-        guard let lastSyncedAt else { return true }
-        return now.timeIntervalSince(lastSyncedAt) >= interval
+    private func applyRustPlan(event: String, projectID: UUID?, projects: [FSProject], activeID: UUID?, replacingExistingDelay: Bool, now: Date = .now, succeeded: Bool? = nil, blocked: Bool? = nil) {
+        let plannerPolicy = RustSyncPlannerClient.Policy(debounce: seconds(policy.localChangeDebounce), maximumDelay: policy.maximumLocalChangeDelay, activeDelay: seconds(policy.activeProjectActivationDebounce), activeRefresh: policy.activeProjectRefresh, inactiveRefresh: policy.inactiveProjectRefresh, retries: policy.retryDelays.map(seconds))
+        let inputs = projects.map { RustSyncPlannerClient.Project(id: $0.id.uuidString, remote: $0.gitRepository?.remoteURL != nil, lastSynced: $0.gitRepository?.lastSyncedAt?.timeIntervalSince1970) }
+        let decision: RustSyncPlannerClient.Decision
+        do {
+            decision = try rustPlanner.plan(.init(policy: plannerPolicy, state: rustPlannerState, projects: inputs, activeID: activeID?.uuidString, now: now.timeIntervalSince1970, event: event, projectID: projectID?.uuidString, succeeded: succeeded, blocked: blocked))
+        } catch { preconditionFailure("Rust sync planner failed: \(error.localizedDescription)") }
+        rustPlannerState = decision.state
+        for item in decision.schedules where UUID(uuidString: item.projectID) != nil { schedule(UUID(uuidString: item.projectID)!, after: .milliseconds(Int64(item.delay * 1_000)), replacingExistingDelay: replacingExistingDelay) }
+    }
+
+    private func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 
     private func schedule(
@@ -146,7 +117,6 @@ final class ProjectSyncScheduler {
             }
             guard !Task.isCancelled, let self else { return }
             delayedTasks[projectID] = nil
-            firstLocalChangeAt[projectID] = nil
             enqueue(projectID)
         }
     }
@@ -173,18 +143,7 @@ final class ProjectSyncScheduler {
                 let outcome = await synchronizationOperation(projectID)
                 runningProjectID = nil
 
-                switch outcome {
-                case .succeeded:
-                    failureCounts[projectID] = nil
-                case .retryLater:
-                    let failureCount = failureCounts[projectID, default: 0]
-                    failureCounts[projectID] = failureCount + 1
-                    let delay = policy.retryDelays[min(failureCount, policy.retryDelays.count - 1)]
-                    schedule(projectID, after: delay, replacingExistingDelay: true)
-                case .blocked:
-                    // A conflict requires a human decision. Do not retry it.
-                    failureCounts[projectID] = nil
-                }
+                applyRustPlan(event: "finished", projectID: projectID, projects: [], activeID: nil, replacingExistingDelay: true, succeeded: outcome == .succeeded, blocked: outcome == .blocked)
 
                 if outcome == .succeeded, followUpIDs.remove(projectID) != nil {
                     enqueue(projectID)

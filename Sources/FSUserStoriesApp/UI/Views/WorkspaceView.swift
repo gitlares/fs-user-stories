@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 private enum PresentedSheet: Identifiable {
     case newProject
+    case editProject(projectID: UUID)
     case newActor(projectID: UUID)
     case editActor(projectID: UUID, actorID: UUID)
     case newStory(projectID: UUID)
@@ -20,6 +21,8 @@ private enum PresentedSheet: Identifiable {
         switch self {
         case .newProject:
             "new-project"
+        case let .editProject(projectID):
+            "edit-project-\(projectID)"
         case let .newActor(projectID):
             "new-actor-\(projectID)"
         case let .editActor(projectID, actorID):
@@ -97,6 +100,17 @@ struct WorkspaceView: View {
                     }
                     .help(L10n.string("Share & Sync"))
 
+                    Menu {
+                        Button {
+                            presentedSheet = .editProject(projectID: project.id)
+                        } label: {
+                            Label(L10n.string("Edit Project"), systemImage: "pencil")
+                        }
+                    } label: {
+                        Label(L10n.string("Project Options"), systemImage: "ellipsis.circle")
+                    }
+                    .help(L10n.string("Project Options"))
+
                     Button {
                         presentedSheet = .newActor(projectID: project.id)
                     } label: {
@@ -119,6 +133,18 @@ struct WorkspaceView: View {
             case .newProject:
                 NewProjectSheet { name, prefix in
                     store.createProject(name: name, prefix: prefix)
+                }
+            case let .editProject(projectID):
+                if let project = store.projects.first(where: { $0.id == projectID }) {
+                    EditProjectSheet(
+                        project: project,
+                        onSave: { name, prefix in
+                            store.updateProject(projectID, name: name, prefix: prefix)
+                        },
+                        onDelete: {
+                            store.deleteProject(projectID)
+                        }
+                    )
                 }
             case let .newActor(projectID):
                 NewActorSheet { name, role in
@@ -234,6 +260,13 @@ struct WorkspaceView: View {
                             .foregroundStyle(.secondary)
                     }
                     .tag(project.id)
+                    .contextMenu {
+                        Button {
+                            presentedSheet = .editProject(projectID: project.id)
+                        } label: {
+                            Label(L10n.string("Edit Project"), systemImage: "pencil")
+                        }
+                    }
                 }
             }
         }
@@ -321,6 +354,7 @@ struct WorkspaceView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationSplitViewColumnWidth(min: 400, ideal: 460, max: 620)
         } else {
             WelcomeView(
                 createProject: { presentedSheet = .newProject },

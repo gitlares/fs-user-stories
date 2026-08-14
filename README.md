@@ -49,7 +49,7 @@ agents, and uses Git only when the user chooses to share a project.
 > FS User Stories does not manage your team, your dates, or your company. It only
 > makes clear what needs to be built.
 
-## Alpha 5 — Version 0.1.0 (Build 5)
+## Alpha 6 — Version 0.1.0 (Build 6)
 
 The first team-testing alpha is already a functional product, not a static UI
 prototype. It includes a signed and notarized Apple Silicon application with the
@@ -84,7 +84,7 @@ following capabilities.
   feed.
 - Export all, Active, Completed, Draft, or manually selected stories into one
   readable Markdown file; review and import selected stories from the same open
-  format. Attachments are intentionally excluded from this transfer in Alpha 5.
+  format. Attachments are intentionally excluded from this transfer in Alpha 6.
 
 ### Managed attachments
 
@@ -111,7 +111,7 @@ The app runs a loopback-only MCP server while it is open. The MCP screen shows
 the live status, URL, port, and connection instructions; the same status is also
 visible in the app footer and menu bar.
 
-Alpha 5 exposes 27 tools covering the product's real operations:
+Alpha 6 exposes 27 tools covering the product's real operations:
 
 - Describe the application and list or inspect projects.
 - Create projects and inspect repository status.
@@ -169,7 +169,7 @@ although a dedicated repository remains the clearest choice for a team.
 
 ## Install
 
-Alpha 5 currently requires an Apple Silicon Mac running macOS 26 or later.
+Alpha 6 currently requires an Apple Silicon Mac running macOS 26 or later.
 
 1. Download the DMG from [GitHub Releases](https://github.com/gitlares/fs-user-stories/releases).
 2. Open the DMG and drag **FS User Stories** to **Applications**.
@@ -184,7 +184,7 @@ This is an alpha intended for team testing. Back up important project data and
 
 ## Road to Version 1
 
-**Alpha 5 is an early macOS release for real-world testing with small teams.**
+**Alpha 6 is an early macOS release for real-world testing with small teams.**
 It is the place to validate the local-first workflow, Git sharing, and local MCP
 before the first stable release.
 
@@ -237,27 +237,28 @@ Attachments are copied, size-limited, and verified by hash.
 
 ## Architecture
 
-The codebase separates the native product from portable infrastructure:
+The codebase separates the portable product core from the native macOS shell:
 
 - `Sources/FSUserStoriesApp/App`: application entry point and macOS lifecycle.
-- `Sources/FSUserStoriesApp/Application`: shared application operations and
-  business rules used by both the UI and MCP.
-- `Sources/FSUserStoriesApp/Domain`: projects, profiles, stories, criteria, and
-  attachment models.
-- `Sources/FSUserStoriesApp/Infrastructure`: SQLite and managed attachment
-  storage.
+- `Sources/FSUserStoriesApp/Application`: observable UI state and command
+  coordination through the Rust protocol.
+- `Sources/FSUserStoriesApp/Domain`: Codable view models exchanged with Rust.
+- `Sources/FSUserStoriesApp/Infrastructure`: thin macOS adapters for Keychain,
+  security-scoped files, process execution, and system storage locations.
 - `Sources/FSUserStoriesApp/UI`: SwiftUI views, components, localization, and
   native macOS presentation.
-- `Sources/FSUserStoriesApp/MCP`: loopback HTTP transport and MCP adapter.
-- `Sources/FSUserStoriesApp/Infrastructure/Git`: portable archive generation,
-  Swift-side synchronization orchestration, GitHub Device Flow, and Keychain
-  integration.
-- `Core`: Rust archive, invitation, three-way merge, conflict handling, and
-  libgit2 transport.
+- `Sources/FSUserStoriesApp/MCP`: lifecycle adapter for the bundled Rust MCP
+  process.
+- `Sources/FSUserStoriesApp/Infrastructure/Git`: Rust command bridge, macOS
+  background timers, and Keychain token storage.
+- `Core`: authoritative Rust business rules, SQLite persistence, search,
+  Markdown transfer, managed attachments, Git/GitHub synchronization,
+  invitations, conflict handling, scheduling policy, and MCP server/tools.
 
 The Rust core is compiled from the source under `Core` and bundled into the app
-as a self-contained executable. It is the portable basis for future platforms
-while the current user interface remains fully native to macOS.
+as a self-contained executable. There is one SQLite database and no alternate
+Swift backend. Rust is the portable basis for future platforms while the current
+user interface remains fully native to macOS.
 
 ## Build from source
 

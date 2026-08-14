@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum AppResources {
@@ -47,4 +48,15 @@ enum AppResources {
         // launch. Callers already handle absent individual files gracefully.
         return .main
     }()
+
+    static func menuBarIcon(darkAppearance: Bool) -> NSImage {
+        let resourceName = darkAppearance ? "MenuBarIconDark" : "MenuBarIconLight"
+        let image = bundle.url(forResource: resourceName, withExtension: "png")
+            .flatMap(NSImage.init(contentsOf:))
+            ?? NSImage(systemSymbolName: "checkmark.square", accessibilityDescription: nil)
+            ?? NSImage()
+        image.isTemplate = false
+        image.size = NSSize(width: 21, height: 16)
+        return image
+    }
 }

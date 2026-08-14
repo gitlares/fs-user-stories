@@ -26,16 +26,17 @@ final class AppStore {
     var selectedProjectID: UUID?
     var selectedStoryID: UUID?
     var pendingWorkspaceAction: WorkspaceAction?
-    private let persistenceStore: PersistenceStore?
+    let persistenceStore: PersistenceStore?
     private let attachmentStorage: AttachmentStorage?
     private let gitSyncService: GitSyncService?
     private let gitHubService: GitHubService
     @ObservationIgnored private var sessionGitHubAccessToken: String?
-    @ObservationIgnored private var localMCPServer: LocalMCPServer?
+    @ObservationIgnored private var localMCPServer: RustMCPServer?
     @ObservationIgnored private var localChangeVersions: [UUID: UInt] = [:]
     @ObservationIgnored private var synchronizingProjectIDs = Set<UUID>()
     @ObservationIgnored private var blockedSyncProjectIDs = Set<UUID>()
     @ObservationIgnored private var automaticMaintenanceTask: Task<Void, Never>?
+    @ObservationIgnored private var mcpWorkspaceRefreshTask: Task<Void, Never>?
     @ObservationIgnored private lazy var syncScheduler = ProjectSyncScheduler { [weak self] projectID in
         guard let self else { return .blocked }
         return await self.runScheduledSynchronization(for: projectID)
@@ -66,6 +67,7 @@ final class AppStore {
             gitSyncService: try GitSyncService()
         )
         store.startMCPServer()
+        store.startMCPWorkspaceRefresh()
         store.ensureManagedRepositories()
         store.startAutomaticSynchronization()
         return store
@@ -73,7 +75,7 @@ final class AppStore {
 
     var mcpServerURL: URL {
         localMCPServer?.endpointURL ?? URL(
-            string: "http://127.0.0.1:\(LocalMCPServer.defaultPort)/mcp"
+            string: "http://127.0.0.1:\(RustMCPServer.defaultPort)/mcp"
         )!
     }
 
@@ -90,23 +92,40 @@ final class AppStore {
     }
 
     private func startMCPServer() {
-        let server = LocalMCPServer(
-            handler: { [weak self] request in
-                self?.handleMCPRequest(request)
-            },
-            resourceHandler: { [weak self] attachmentID in
-                self?.mcpAttachmentResource(attachmentID)
-            },
-            stateChanged: { [weak self] state in
-                self?.mcpServerState = state
-            }
-        )
-        localMCPServer = server
-        mcpServerState = .starting
         do {
+            guard let persistenceStore, let attachmentStorage else { return }
+            let server = RustMCPServer(
+                databaseURL: persistenceStore.databaseURL,
+                attachmentsRootURL: attachmentStorage.rootURL,
+                coreExecutableURL: try RustCoreClient().executableURL,
+                stateChanged: { [weak self] state in self?.mcpServerState = state }
+            )
+            localMCPServer = server
+            mcpServerState = .starting
             try server.start()
         } catch {
             mcpServerState = .failed(error.localizedDescription)
+        }
+    }
+
+    /// MCP mutations are committed directly by Rust to the same SQLite database.
+    /// Refreshing is deliberately lightweight and never queues, delays, or owns local saves.
+    private func startMCPWorkspaceRefresh() {
+        guard persistenceStore != nil else { return }
+        mcpWorkspaceRefreshTask?.cancel()
+        mcpWorkspaceRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, let persistenceStore = self.persistenceStore else { return }
+                guard let refreshedProjects = try? persistenceStore.loadProjects(),
+                      refreshedProjects != self.projects else { continue }
+                self.projects = refreshedProjects
+                if let selectedProjectID = self.selectedProjectID,
+                   !refreshedProjects.contains(where: { $0.id == selectedProjectID }) {
+                    self.selectedProjectID = refreshedProjects.first?.id
+                    self.selectedStoryID = refreshedProjects.first?.stories.first?.id
+                }
+            }
         }
     }
 
@@ -137,33 +156,92 @@ final class AppStore {
 
     @discardableResult
     func createProject(name: String, prefix: String) -> Result<FSProject, WorkspaceError> {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedPrefix = prefix.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !normalizedName.isEmpty else { return .failure(.nameRequired) }
-        guard !normalizedPrefix.isEmpty else { return .failure(.prefixRequired) }
-        let project = FSProject(
-            name: normalizedName,
-            prefix: normalizedPrefix
-        )
-        projects.append(project)
-        selectedProjectID = project.id
-        selectedStoryID = nil
-        if let gitSyncService {
-            do {
-                projects[projects.count - 1].gitRepository = try gitSyncService.initialize(
-                    project,
-                    attachmentURLs: [:]
+        do {
+            let project: FSProject
+            if let persistenceStore {
+                project = try persistenceStore.createProject(name: name, prefix: prefix)
+                projects.append(project)
+            } else {
+                let seed = FSProject(name: "", prefix: "")
+                project = try RustWorkspaceClient().apply(
+                    project: seed,
+                    operation: ["operation": "update_project", "name": name, "prefix": prefix]
                 )
-            } catch {
-                projects.removeLast()
-                selectedProjectID = projects.first?.id
-                return .failure(.persistenceFailure(error.localizedDescription))
+                projects.append(project)
             }
+            selectedProjectID = project.id
+            selectedStoryID = nil
+            if let gitSyncService, let persistenceStore, let attachmentStorage {
+                projects[projects.count - 1] = try gitSyncService.initializeStored(
+                    projectID: project.id,
+                    databaseURL: persistenceStore.databaseURL,
+                    attachmentsRootURL: attachmentStorage.rootURL
+                )
+            }
+            return .success(projects[projects.count - 1])
+        } catch let error as RustCoreError {
+            return .failure(workspaceError(for: error))
+        } catch let error as WorkspaceError {
+            return .failure(error)
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
         }
-        guard persist() else {
-            return .failure(.persistenceFailure(persistenceError ?? "The project could not be saved"))
+    }
+
+    @discardableResult
+    func updateProject(
+        _ projectID: UUID,
+        name: String,
+        prefix: String
+    ) -> Result<FSProject, WorkspaceError> {
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: ["operation": "update_project", "name": name, "prefix": prefix],
+            persistenceMessage: "The project could not be saved"
+        ) {
+        case let .success(project):
+            return .success(project)
+        case let .failure(error):
+            return .failure(error)
         }
-        return .success(projects[projects.count - 1])
+    }
+
+    @discardableResult
+    func deleteProject(_ projectID: UUID) -> Result<Void, WorkspaceError> {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+            return .failure(.projectNotFound)
+        }
+        do {
+            if let persistenceStore {
+                guard let attachmentStorage else {
+                    throw WorkspaceError.persistenceFailure("The local workspace is unavailable")
+                }
+                let repositoriesRootURL = gitSyncService?.managedRepositoriesRootURL
+                    ?? attachmentStorage.rootURL
+                    .deletingLastPathComponent()
+                    .appending(path: "Repositories", directoryHint: .isDirectory)
+                try persistenceStore.deleteProject(
+                    projectID,
+                    attachmentsRootURL: attachmentStorage.rootURL,
+                    repositoriesRootURL: repositoriesRootURL
+                )
+            }
+            projects.remove(at: projectIndex)
+            selectedProjectID = projects.first?.id
+            selectedStoryID = projects.first?.stories.first?.id
+            if persistenceStore == nil, !persist() {
+                return .failure(.persistenceFailure(persistenceError ?? "The project could not be deleted"))
+            }
+        } catch let error as RustCoreError {
+            return .failure(workspaceError(for: error))
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+
+        projectSyncStates[projectID] = nil
+        blockedSyncProjectIDs.remove(projectID)
+        synchronizingProjectIDs.remove(projectID)
+        return .success(())
     }
 
     func connectSharedRepository(remoteURL: String, projectID: UUID) async -> Result<Void, WorkspaceError> {
@@ -173,33 +251,34 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
-        let project = projects[projectIndex]
-        let attachmentURLs = Dictionary(
-            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                attachmentURL(for: attachment).map { (attachment.id, $0) }
-            }
-        )
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         setSyncState(.working, for: projectID)
         do {
-            let link = try await Task.detached {
-                var preparedProject = project
-                if preparedProject.gitRepository == nil {
-                    preparedProject.gitRepository = try gitSyncService.initialize(
-                        project,
-                        attachmentURLs: attachmentURLs
+            if projects[projectIndex].gitRepository == nil {
+                projects[projectIndex] = try await Task.detached {
+                    try gitSyncService.initializeStored(
+                        projectID: projectID,
+                        databaseURL: databaseURL,
+                        attachmentsRootURL: attachmentsRootURL
                     )
-                }
-                return try gitSyncService.connect(preparedProject, remoteURL: remoteURL)
+                }.value
+            }
+            let connectedProject = try await Task.detached {
+                try gitSyncService.connectStored(
+                    projectID: projectID,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
+                    remoteURL: remoteURL
+                )
             }.value
             guard let currentIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            projects[currentIndex].gitRepository = link
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The repository connection could not be saved"
-                )
-            }
+            projects[currentIndex] = connectedProject
             setSyncState(.idle, for: projectID)
             return .success(())
         } catch {
@@ -209,31 +288,30 @@ final class AppStore {
     }
 
     func prepareManagedRepository(_ projectID: UUID) async -> Result<Void, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }) else {
+        guard projects.contains(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
-        let attachmentURLs = Dictionary(
-            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                attachmentURL(for: attachment).map { (attachment.id, $0) }
-            }
-        )
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         setSyncState(.working, for: projectID)
         do {
-            let link = try await Task.detached {
-                try gitSyncService.initialize(project, attachmentURLs: attachmentURLs)
+            let updated = try await Task.detached {
+                try gitSyncService.initializeStored(
+                    projectID: projectID,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL
+                )
             }.value
             guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            projects[projectIndex].gitRepository = link
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The managed repository could not be saved"
-                )
-            }
+            projects[projectIndex] = updated
             setSyncState(.idle, for: projectID)
             return .success(())
         } catch {
@@ -246,7 +324,7 @@ final class AppStore {
         _ projectID: UUID,
         choices: [String: Bool]
     ) async -> Result<Void, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }) else {
+        guard projects.contains(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
         guard choices.count == pendingSyncConflicts.count else {
@@ -255,37 +333,30 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
-        let attachmentURLs = Dictionary(
-            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                attachmentURL(for: attachment).map { (attachment.id, $0) }
-            }
-        )
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         let accessToken = githubAccessToken()
         setSyncState(.working, for: projectID)
         do {
-            let synchronization = try await Task.detached {
-                try gitSyncService.resolveSynchronization(
-                    project,
+            let synchronizedProject = try await Task.detached {
+                try gitSyncService.resolveStoredSynchronization(
+                    projectID: projectID,
                     choices: choices,
-                    attachmentURLs: attachmentURLs,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
                     accessToken: accessToken
                 )
             }.value
             guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            projects[projectIndex] = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The synchronization state could not be saved"
-                )
-            }
+            projects[projectIndex] = synchronizedProject
             pendingSyncConflicts = []
             blockedSyncProjectIDs.remove(projectID)
-            setSyncState(.succeeded(synchronization.link.lastSyncedAt ?? .now), for: projectID)
+            setSyncState(.succeeded(synchronizedProject.gitRepository?.lastSyncedAt ?? .now), for: projectID)
             return .success(())
         } catch {
             setSyncState(.failed(error.localizedDescription), for: projectID)
@@ -294,52 +365,37 @@ final class AppStore {
     }
 
     func synchronizeProject(_ projectID: UUID) async -> Result<Void, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }) else {
+        guard projects.contains(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         guard synchronizingProjectIDs.insert(projectID).inserted else {
             return .success(())
         }
         defer { synchronizingProjectIDs.remove(projectID) }
-        let attachmentURLs = Dictionary(
-            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                attachmentURL(for: attachment).map { (attachment.id, $0) }
-            }
-        )
         let accessToken = githubAccessToken()
-        let localChangeVersion = localChangeVersions[projectID, default: 0]
         setSyncState(.working, for: projectID)
         do {
-            let synchronization = try await Task.detached {
-                try gitSyncService.synchronize(
-                    project,
-                    attachmentURLs: attachmentURLs,
+            let synchronizedProject = try await Task.detached {
+                try gitSyncService.synchronizeStored(
+                    projectID: projectID,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
                     accessToken: accessToken
                 )
             }.value
             guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            if localChangeVersions[projectID, default: 0] == localChangeVersion {
-                projects[projectIndex] = try projectFromSynchronizedSnapshot(
-                    synchronization.snapshot,
-                    link: synchronization.link
-                )
-            } else {
-                // Never overwrite an edit that happened while Git was working.
-                // The scheduler will make one follow-up pass with the newer snapshot.
-                projects[projectIndex].gitRepository = synchronization.link
-                syncScheduler.recordLocalChange(for: projectID)
-            }
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The synchronization state could not be saved"
-                )
-            }
-            setSyncState(.succeeded(synchronization.link.lastSyncedAt ?? .now), for: projectID)
+            projects[projectIndex] = synchronizedProject
+            setSyncState(.succeeded(synchronizedProject.gitRepository?.lastSyncedAt ?? .now), for: projectID)
             return .success(())
         } catch let RustCoreError.syncConflicts(conflicts) {
             pendingSyncConflicts = conflicts
@@ -434,18 +490,21 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         setSyncState(.working, for: projectID)
         do {
             let project = projects[projectIndex]
-            let attachmentURLs = Dictionary(
-                uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                    attachmentURL(for: attachment).map { (attachment.id, $0) }
-                }
-            )
-            var connectedProject = project
-            if connectedProject.gitRepository == nil {
-                connectedProject.gitRepository = try await Task.detached {
-                    try gitSyncService.initialize(project, attachmentURLs: attachmentURLs)
+            if project.gitRepository == nil {
+                projects[projectIndex] = try await Task.detached {
+                    try gitSyncService.initializeStored(
+                        projectID: projectID,
+                        databaseURL: databaseURL,
+                        attachmentsRootURL: attachmentsRootURL
+                    )
                 }.value
             }
             let token = try await gitHubService.finishAuthorization(authorization)
@@ -454,29 +513,26 @@ final class AppStore {
                 name: project.name,
                 token: token
             )
-            connectedProject.gitRepository = try gitSyncService.connect(
-                connectedProject,
-                remoteURL: repository.cloneURL
-            )
-            let synchronization = try await Task.detached {
-                try gitSyncService.synchronize(
-                    connectedProject,
-                    attachmentURLs: attachmentURLs,
+            _ = try await Task.detached {
+                try gitSyncService.connectStored(
+                    projectID: projectID,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
+                    remoteURL: repository.cloneURL
+                )
+            }.value
+            let synchronizedProject = try await Task.detached {
+                try gitSyncService.synchronizeStored(
+                    projectID: projectID,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
                     accessToken: token
                 )
             }.value
             guard let currentIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            projects[currentIndex] = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The GitHub repository could not be saved"
-                )
-            }
+            projects[currentIndex] = synchronizedProject
             setSyncState(.succeeded(.now), for: projectID)
             return .success(repository)
         } catch {
@@ -485,85 +541,29 @@ final class AppStore {
         }
     }
 
-    func connectSharedRepositoryFromMCP(
-        remoteURL: String,
-        projectID: UUID
-    ) -> Result<FSProject, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let gitSyncService else {
-            return .failure(.persistenceFailure("The synchronization core is unavailable"))
-        }
-        do {
-            projects[projectIndex].gitRepository = try gitSyncService.connect(
-                projects[projectIndex],
-                remoteURL: remoteURL
-            )
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The repository connection could not be saved"
-                )
-            }
-            return .success(projects[projectIndex])
-        } catch {
-            return .failure(.persistenceFailure(error.localizedDescription))
-        }
-    }
-
-    func queueProjectSynchronizationFromMCP(_ projectID: UUID) -> Result<FSProject, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard project.gitRepository?.remoteURL != nil else {
-            return .failure(.persistenceFailure(L10n.string("Connect a shared repository first.")))
-        }
-        syncScheduler.requestImmediateSync(for: projectID)
-        return .success(project)
-    }
-
-    func projectInvitationFromMCP(_ projectID: UUID) -> Result<String, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let gitSyncService else {
-            return .failure(.persistenceFailure("The synchronization core is unavailable"))
-        }
-        do {
-            return .success(try gitSyncService.invitation(for: project))
-        } catch {
-            return .failure(.persistenceFailure(error.localizedDescription))
-        }
-    }
-
     func joinSharedProject(invitation: String) async -> Result<FSProject, WorkspaceError> {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         let accessToken = githubAccessToken()
         projectSyncState = .working
         do {
-            let synchronization = try await Task.detached {
-                try gitSyncService.join(
+            let project = try await Task.detached {
+                try gitSyncService.joinStored(
                     invitation: invitation,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
                     accessToken: accessToken
                 )
             }.value
-            guard !projects.contains(where: { $0.id == synchronization.snapshot.projectID }) else {
-                throw WorkspaceError.persistenceFailure(L10n.string("This shared project is already on this Mac."))
-            }
-            let project = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
             projects.append(project)
             selectedProjectID = project.id
             selectedStoryID = project.stories.sorted { $0.createdAt > $1.createdAt }.first?.id
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The shared project could not be saved"
-                )
-            }
             projectSyncState = .succeeded(.now)
             projectSyncStates[project.id] = .succeeded(.now)
             return .success(project)
@@ -574,34 +574,33 @@ final class AppStore {
     }
 
     func sharedRepositoryUsesGitHub(_ remoteURL: String) -> Bool {
-        gitSyncService?.remoteUsesGitHub(remoteURL) == true
+        guard let gitSyncService else { return false }
+        return (try? gitSyncService.remoteUsesGitHub(remoteURL)) == true
     }
 
     func joinSharedRepository(remoteURL: String) async -> Result<FSProject, WorkspaceError> {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
+        guard let persistenceStore, let attachmentStorage else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
+        }
+        let databaseURL = persistenceStore.databaseURL
+        let attachmentsRootURL = attachmentStorage.rootURL
         let accessToken = githubAccessToken()
         projectSyncState = .working
         do {
-            let synchronization = try await Task.detached {
-                try gitSyncService.join(remoteURL: remoteURL, accessToken: accessToken)
+            let project = try await Task.detached {
+                try gitSyncService.joinStored(
+                    remoteURL: remoteURL,
+                    databaseURL: databaseURL,
+                    attachmentsRootURL: attachmentsRootURL,
+                    accessToken: accessToken
+                )
             }.value
-            guard !projects.contains(where: { $0.id == synchronization.snapshot.projectID }) else {
-                throw WorkspaceError.persistenceFailure(L10n.string("This shared project is already on this Mac."))
-            }
-            let project = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
             projects.append(project)
             selectedProjectID = project.id
             selectedStoryID = project.stories.sorted { $0.createdAt > $1.createdAt }.first?.id
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The shared project could not be saved"
-                )
-            }
             setSyncState(.succeeded(.now), for: project.id)
             return .success(project)
         } catch {
@@ -611,79 +610,18 @@ final class AppStore {
     }
 
     private func ensureManagedRepositories() {
-        guard let gitSyncService else { return }
-        var changed = false
+        guard let gitSyncService, let persistenceStore, let attachmentStorage else { return }
         for index in projects.indices where projects[index].gitRepository == nil {
             do {
-                let project = projects[index]
-                let attachmentURLs = Dictionary(
-                    uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                        attachmentURL(for: attachment).map { (attachment.id, $0) }
-                    }
+                projects[index] = try gitSyncService.initializeStored(
+                    projectID: projects[index].id,
+                    databaseURL: persistenceStore.databaseURL,
+                    attachmentsRootURL: attachmentStorage.rootURL
                 )
-                projects[index].gitRepository = try gitSyncService.initialize(
-                    project,
-                    attachmentURLs: attachmentURLs
-                )
-                changed = true
             } catch {
                 projectSyncState = .failed(error.localizedDescription)
             }
         }
-        if changed { _ = persist() }
-    }
-
-    private func projectFromSynchronizedSnapshot(
-        _ snapshot: GitProjectSnapshot,
-        link: GitRepositoryLink
-    ) throws -> FSProject {
-        let actors = snapshot.actors.map {
-            ProjectActor(id: $0.id, name: $0.name, role: $0.role)
-        }
-        var stories: [UserStory] = []
-        let archiveRoot = URL(filePath: link.localPath, directoryHint: .isDirectory)
-            .appending(path: GitProjectArchive.directoryName, directoryHint: .isDirectory)
-        for story in snapshot.stories {
-            var attachments: [StoryAttachment] = []
-            for metadata in story.attachments {
-                let sourceURL = archiveRoot.appending(path: metadata.archiveRelativePath)
-                if let attachmentStorage {
-                    attachments.append(
-                        try attachmentStorage.restoreFile(
-                            from: sourceURL,
-                            metadata: metadata,
-                            projectID: snapshot.projectID,
-                            storyID: story.id
-                        )
-                    )
-                }
-            }
-            stories.append(
-                UserStory(
-                    id: story.id,
-                    number: story.number,
-                    title: story.title,
-                    actorID: story.actorID,
-                    want: story.want,
-                    outcome: story.outcome,
-                    notes: story.notes,
-                    acceptanceCriteria: story.acceptanceCriteria.map {
-                        AcceptanceCriterion(id: $0.id, text: $0.text, isMet: $0.isMet)
-                    },
-                    attachments: attachments,
-                    status: StoryStatus(rawValue: story.status) ?? .draft,
-                    createdAt: story.createdAt
-                )
-            )
-        }
-        return FSProject(
-            id: snapshot.projectID,
-            name: snapshot.name,
-            prefix: snapshot.prefix,
-            actors: actors,
-            stories: stories,
-            gitRepository: link
-        )
     }
 
     func selectStory(_ storyID: UUID, in projectID: UUID) {
@@ -751,21 +689,17 @@ final class AppStore {
 
     @discardableResult
     func addActor(name: String, role: String, to projectID: UUID) -> Result<ProjectActor, WorkspaceError> {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedName.isEmpty else { return .failure(.nameRequired) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: ["operation": "add_actor", "name": name, "role": role],
+            persistenceMessage: "The actor could not be saved"
+        ) {
+        case let .success(project):
+            guard let actor = project.actors.last else { return .failure(.actorNotFound) }
+            return .success(actor)
+        case let .failure(error):
+            return .failure(error)
         }
-
-        let actor = ProjectActor(
-            name: normalizedName,
-            role: role.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-        projects[projectIndex].actors.append(actor)
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The actor could not be saved"))
-        }
-        return .success(actor)
     }
 
     @discardableResult
@@ -775,41 +709,38 @@ final class AppStore {
         role: String,
         projectID: UUID
     ) -> Result<ProjectActor, WorkspaceError> {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedName.isEmpty else { return .failure(.nameRequired) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: [
+                "operation": "update_actor",
+                "actor_id": actorID.uuidString,
+                "name": name,
+                "role": role
+            ],
+            persistenceMessage: "The actor could not be saved"
+        ) {
+        case let .success(project):
+            guard let actor = project.actors.first(where: { $0.id == actorID }) else {
+                return .failure(.actorNotFound)
+            }
+            return .success(actor)
+        case let .failure(error):
+            return .failure(error)
         }
-        guard let actorIndex = projects[projectIndex].actors.firstIndex(where: { $0.id == actorID }) else {
-            return .failure(.actorNotFound)
-        }
-
-        projects[projectIndex].actors[actorIndex].name = normalizedName
-        projects[projectIndex].actors[actorIndex].role = role
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The actor could not be saved"))
-        }
-        return .success(projects[projectIndex].actors[actorIndex])
     }
 
     @discardableResult
     func deleteActor(_ actorID: UUID, projectID: UUID) -> Result<Void, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: ["operation": "delete_actor", "actor_id": actorID.uuidString],
+            persistenceMessage: "The actor could not be deleted"
+        ) {
+        case .success:
+            return .success(())
+        case let .failure(error):
+            return .failure(error)
         }
-        guard let actorIndex = projects[projectIndex].actors.firstIndex(where: { $0.id == actorID }) else {
-            return .failure(.actorNotFound)
-        }
-        guard !projects[projectIndex].stories.contains(where: { $0.actorID == actorID }) else {
-            return .failure(.actorInUse)
-        }
-
-        projects[projectIndex].actors.remove(at: actorIndex)
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The actor could not be deleted"))
-        }
-        return .success(())
     }
 
     @discardableResult
@@ -821,40 +752,25 @@ final class AppStore {
         acceptanceCriteria: [AcceptanceCriterion],
         to projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedWant = want.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedOutcome = outcome.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedCriteria = acceptanceCriteria.compactMap { criterion -> AcceptanceCriterion? in
-            let text = criterion.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? nil : AcceptanceCriterion(id: criterion.id, text: text, isMet: criterion.isMet)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: [
+                "operation": "add_story",
+                "title": title,
+                "actor_id": actorID.uuidString,
+                "want": want,
+                "outcome": outcome,
+                "acceptance_criteria": coreCriteria(acceptanceCriteria)
+            ],
+            persistenceMessage: "The story could not be saved"
+        ) {
+        case let .success(project):
+            guard let story = project.stories.last else { return .failure(.storyNotFound) }
+            selectedStoryID = story.id
+            return .success(story)
+        case let .failure(error):
+            return .failure(error)
         }
-        guard !normalizedTitle.isEmpty else { return .failure(.titleRequired) }
-        guard !normalizedWant.isEmpty else { return .failure(.wantRequired) }
-        guard !normalizedOutcome.isEmpty else { return .failure(.outcomeRequired) }
-        guard !normalizedCriteria.isEmpty else { return .failure(.acceptanceCriterionRequired) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard projects[projectIndex].actors.contains(where: { $0.id == actorID }) else {
-            return .failure(.actorNotFound)
-        }
-
-        let nextNumber = (projects[projectIndex].stories.map(\.number).max() ?? 0) + 1
-        let story = UserStory(
-            number: nextNumber,
-            title: normalizedTitle,
-            actorID: actorID,
-            want: normalizedWant,
-            outcome: normalizedOutcome,
-            acceptanceCriteria: normalizedCriteria
-        )
-
-        projects[projectIndex].stories.append(story)
-        selectedStoryID = story.id
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The story could not be saved"))
-        }
-        return .success(story)
     }
 
     @discardableResult
@@ -863,57 +779,29 @@ final class AppStore {
         to projectID: UUID
     ) -> Result<Int, WorkspaceError> {
         guard !importedStories.isEmpty else { return .success(0) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+        guard let currentProject = projects.first(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
-
-        let originalProject = projects[projectIndex]
-        var nextNumber = (originalProject.stories.map(\.number).max() ?? 0) + 1
-        var importedStoryIDs: [UUID] = []
-
-        for portableStory in importedStories {
-            let profileName = portableStory.profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let actorID: UUID
-            if let existingActor = projects[projectIndex].actors.first(where: {
-                $0.name.compare(profileName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-            }) {
-                actorID = existingActor.id
-            } else {
-                let actor = ProjectActor(
-                    name: profileName.isEmpty ? L10n.string("Imported Profile") : profileName,
-                    role: portableStory.profileDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                projects[projectIndex].actors.append(actor)
-                actorID = actor.id
+        do {
+            let encodedStories = try coreJSONObject(importedStories)
+            switch mutateWorkspaceProject(
+                projectID: projectID,
+                operation: [
+                    "operation": "import_stories",
+                    "stories": encodedStories,
+                    "imported_profile_name": L10n.string("Imported Profile")
+                ],
+                persistenceMessage: L10n.string("The stories could not be imported.")
+            ) {
+            case let .success(project):
+                selectedStoryID = project.stories.dropFirst(currentProject.stories.count).last?.id
+                return .success(importedStories.count)
+            case let .failure(error):
+                return .failure(error)
             }
-
-            let story = UserStory(
-                number: nextNumber,
-                title: portableStory.title.trimmingCharacters(in: .whitespacesAndNewlines),
-                actorID: actorID,
-                want: portableStory.want.trimmingCharacters(in: .whitespacesAndNewlines),
-                outcome: portableStory.outcome.trimmingCharacters(in: .whitespacesAndNewlines),
-                notes: portableStory.notes,
-                acceptanceCriteria: portableStory.acceptanceCriteria.map {
-                    AcceptanceCriterion(text: $0.text, isMet: $0.isMet)
-                },
-                attachments: [],
-                status: portableStory.status,
-                createdAt: portableStory.createdAt
-            )
-            projects[projectIndex].stories.append(story)
-            importedStoryIDs.append(story.id)
-            nextNumber += 1
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
         }
-
-        guard persist(changedProjectID: projectID) else {
-            projects[projectIndex] = originalProject
-            return .failure(.persistenceFailure(
-                persistenceError ?? L10n.string("The stories could not be imported.")
-            ))
-        }
-        selectedStoryID = importedStoryIDs.last
-        return .success(importedStories.count)
     }
 
     @discardableResult
@@ -926,42 +814,27 @@ final class AppStore {
         acceptanceCriteria: [AcceptanceCriterion],
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedWant = want.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedOutcome = outcome.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedCriteria = acceptanceCriteria.compactMap { criterion -> AcceptanceCriterion? in
-            let text = criterion.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? nil : AcceptanceCriterion(id: criterion.id, text: text, isMet: criterion.isMet)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: [
+                "operation": "update_story",
+                "story_id": storyID.uuidString,
+                "title": title,
+                "actor_id": actorID.uuidString,
+                "want": want,
+                "outcome": outcome,
+                "acceptance_criteria": coreCriteria(acceptanceCriteria)
+            ],
+            persistenceMessage: "The story could not be saved"
+        ) {
+        case let .success(project):
+            guard let story = project.stories.first(where: { $0.id == storyID }) else {
+                return .failure(.storyNotFound)
+            }
+            return .success(story)
+        case let .failure(error):
+            return .failure(error)
         }
-        guard !normalizedTitle.isEmpty else { return .failure(.titleRequired) }
-        guard !normalizedWant.isEmpty else { return .failure(.wantRequired) }
-        guard !normalizedOutcome.isEmpty else { return .failure(.outcomeRequired) }
-        guard !normalizedCriteria.isEmpty else { return .failure(.acceptanceCriterionRequired) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard projects[projectIndex].actors.contains(where: { $0.id == actorID }) else {
-            return .failure(.actorNotFound)
-        }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
-        }
-
-        projects[projectIndex].stories[storyIndex].title = title
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        projects[projectIndex].stories[storyIndex].actorID = actorID
-        projects[projectIndex].stories[storyIndex].want = want
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        projects[projectIndex].stories[storyIndex].outcome = outcome
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        projects[projectIndex].stories[storyIndex].acceptanceCriteria = normalizedCriteria
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The story could not be saved"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
     }
 
     @discardableResult
@@ -970,16 +843,15 @@ final class AppStore {
         in storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        guard let project = projects.first(where: { $0.id == projectID }),
-              let story = project.stories.first(where: { $0.id == storyID }),
-              let criterion = story.acceptanceCriteria.first(where: { $0.id == criterionID }) else {
-            return .failure(.criterionNotFound)
-        }
-        return setAcceptanceCriterion(
-            criterionID,
-            isMet: !criterion.isMet,
-            in: storyID,
-            projectID: projectID
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "toggle_acceptance_criterion",
+                "story_id": storyID.uuidString,
+                "criterion_id": criterionID.uuidString
+            ],
+            persistenceMessage: "The criterion could not be saved"
         )
     }
 
@@ -990,24 +862,17 @@ final class AppStore {
         in storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
-        }
-        guard let criterionIndex = projects[projectIndex].stories[storyIndex].acceptanceCriteria
-            .firstIndex(where: { $0.id == criterionID }) else {
-            return .failure(.criterionNotFound)
-        }
-        projects[projectIndex].stories[storyIndex].acceptanceCriteria[criterionIndex].isMet = isMet
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be saved"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "set_acceptance_criterion",
+                "story_id": storyID.uuidString,
+                "criterion_id": criterionID.uuidString,
+                "is_met": isMet
+            ],
+            persistenceMessage: "The criterion could not be saved"
+        )
     }
 
     @discardableResult
@@ -1016,25 +881,16 @@ final class AppStore {
         to storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return .failure(.acceptanceCriterionRequired) }
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
-        }
-
-        projects[projectIndex].stories[storyIndex].acceptanceCriteria.append(
-            AcceptanceCriterion(text: trimmedText)
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "add_acceptance_criterion",
+                "story_id": storyID.uuidString,
+                "text": text
+            ],
+            persistenceMessage: "The criterion could not be saved"
         )
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be saved"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
     }
 
     @discardableResult
@@ -1043,54 +899,39 @@ final class AppStore {
         for storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-        let story = projects[projectIndex].stories[storyIndex]
-        if status == .done,
-           story.acceptanceCriteria.isEmpty || story.metCriteriaCount != story.acceptanceCriteria.count {
-            return .failure(.incompleteAcceptanceCriteria)
-        }
-
-        projects[projectIndex].stories[storyIndex].status = status
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The story status could not be saved"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "set_story_status",
+                "story_id": storyID.uuidString,
+                "status": status.rawValue
+            ],
+            persistenceMessage: "The story status could not be saved"
+        )
     }
 
     @discardableResult
     func duplicateStory(_ storyID: UUID, projectID: UUID) -> Result<UserStory, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let source = projects[projectIndex].stories.first(where: { $0.id == storyID }) else {
+        guard let source = projects.first(where: { $0.id == projectID })?.stories.first(where: { $0.id == storyID }) else {
             return .failure(.storyNotFound)
         }
-
-        let nextNumber = (projects[projectIndex].stories.map(\.number).max() ?? 0) + 1
-        let duplicatedStory = UserStory(
-            number: nextNumber,
-            title: String(format: L10n.string("Copy of %@"), source.title),
-            actorID: source.actorID,
-            want: source.want,
-            outcome: source.outcome,
-            notes: source.notes,
-            acceptanceCriteria: source.acceptanceCriteria.map {
-                AcceptanceCriterion(text: $0.text)
-            },
-            status: .draft
-        )
-
-        projects[projectIndex].stories.append(duplicatedStory)
-        selectedStoryID = duplicatedStory.id
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The story could not be duplicated"))
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: [
+                "operation": "duplicate_story",
+                "story_id": storyID.uuidString,
+                "copy_title": String(format: L10n.string("Copy of %@"), source.title)
+            ],
+            persistenceMessage: "The story could not be duplicated"
+        ) {
+        case let .success(project):
+            guard let story = project.stories.last else { return .failure(.storyNotFound) }
+            selectedStoryID = story.id
+            return .success(story)
+        case let .failure(error):
+            return .failure(error)
         }
-        return .success(duplicatedStory)
     }
 
     @discardableResult
@@ -1099,45 +940,54 @@ final class AppStore {
         for storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
-        }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
-        }
-
-        projects[projectIndex].stories[storyIndex].notes = notes
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The notes could not be saved"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "update_story_notes",
+                "story_id": storyID.uuidString,
+                "notes": notes
+            ],
+            persistenceMessage: "The notes could not be saved"
+        )
     }
 
     @discardableResult
     func deleteStory(_ storyID: UUID, projectID: UUID) -> Result<Void, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
-            return .failure(.projectNotFound)
+        if let persistenceStore, let attachmentStorage,
+           let projectIndex = projects.firstIndex(where: { $0.id == projectID }) {
+            do {
+                let project = try persistenceStore.deleteStory(
+                    storyID,
+                    projectID: projectID,
+                    attachmentsRootURL: attachmentStorage.rootURL
+                )
+                projects[projectIndex] = project
+                if selectedStoryID == storyID {
+                    selectedStoryID = project.stories.first?.id
+                }
+                recordPersistedChange(for: projectID)
+                return .success(())
+            } catch let error as RustCoreError {
+                return .failure(workspaceError(for: error))
+            } catch {
+                return .failure(.persistenceFailure(error.localizedDescription))
+            }
         }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
-        }
-
-        projects[projectIndex].stories.remove(at: storyIndex)
-        if selectedStoryID == storyID {
-            let remainingStories = projects[projectIndex].stories
-            selectedStoryID = remainingStories.isEmpty
-                ? nil
-                : remainingStories[min(storyIndex, remainingStories.count - 1)].id
-        }
-        if persist(changedProjectID: projectID) {
-            try? attachmentStorage?.removeStoryDirectory(projectID: projectID, storyID: storyID)
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: ["operation": "delete_story", "story_id": storyID.uuidString],
+            persistenceMessage: "The story could not be deleted"
+        ) {
+        case let .success(project):
+            if selectedStoryID == storyID {
+                let remainingStories = project.stories
+                selectedStoryID = remainingStories.first?.id
+            }
             return .success(())
+        case let .failure(error):
+            return .failure(error)
         }
-        return .failure(.persistenceFailure(persistenceError ?? "The story could not be deleted"))
     }
 
     func attachmentURL(for attachment: StoryAttachment) -> URL? {
@@ -1164,7 +1014,7 @@ final class AppStore {
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
         guard !urls.isEmpty else { return .failure(.attachmentsRequired) }
-        guard let attachmentStorage else {
+        guard let attachmentStorage, let persistenceStore else {
             return .failure(.attachmentFailure("Attachment storage is unavailable"))
         }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
@@ -1176,60 +1026,23 @@ final class AppStore {
         guard projects[projectIndex].stories[storyIndex].status != .done else {
             return .failure(.completedStoryReadOnly)
         }
-
-        let existingAttachments = projects[projectIndex].stories[storyIndex].attachments
-        guard existingAttachments.count + urls.count <= AttachmentStorage.maximumFilesPerStory else {
-            return .failure(.attachmentFailure(L10n.string("A story can have up to 10 attachments.")))
-        }
-
         do {
-            let files = try urls.map(attachmentStorage.preflight)
-            let existingSize = existingAttachments.reduce(Int64(0)) { $0 + $1.byteSize }
-            let addedSize = files.reduce(Int64(0)) { $0 + $1.byteSize }
-            guard existingSize + addedSize <= AttachmentStorage.maximumStorySize else {
-                return .failure(.attachmentFailure(L10n.string("Attachments for a story cannot exceed 50 MB.")))
+            let updatedProject = try attachmentStorage.withSecurityScopedAccess(to: urls) {
+                try persistenceStore.importAttachments(
+                    sourceURLs: urls,
+                    projectID: projectID,
+                    storyID: storyID,
+                    attachmentsRootURL: attachmentStorage.rootURL
+                )
             }
-
-            var importedAttachments: [StoryAttachment] = []
-            do {
-                for url in urls {
-                    importedAttachments.append(
-                        try attachmentStorage.importFile(
-                            from: url,
-                            projectID: projectID,
-                            storyID: storyID
-                        )
-                    )
-                }
-            } catch {
-                for attachment in importedAttachments {
-                    try? attachmentStorage.remove(attachment)
-                }
-                throw error
+            projects[projectIndex] = updatedProject
+            recordPersistedChange(for: projectID)
+            guard let updatedStory = updatedProject.stories.first(where: { $0.id == storyID }) else {
+                return .failure(.storyNotFound)
             }
-
-            projects[projectIndex].stories[storyIndex].attachments.append(contentsOf: importedAttachments)
-            guard persist(changedProjectID: projectID) else {
-                projects[projectIndex].stories[storyIndex].attachments.removeAll {
-                    importedAttachments.contains($0)
-                }
-                for attachment in importedAttachments {
-                    try? attachmentStorage.remove(attachment)
-                }
-                return .failure(.attachmentFailure(L10n.string("The attachments could not be saved.")))
-            }
-            return .success(projects[projectIndex].stories[storyIndex])
-        } catch let error as AttachmentStorageError {
-            switch error {
-            case let .fileTooLarge(filename):
-                return .failure(.attachmentFailure(
-                    String(format: L10n.string("%@ is larger than 10 MB."), filename)
-                ))
-            case let .notAFile(filename):
-                return .failure(.attachmentFailure(
-                    String(format: L10n.string("%@ is not a supported file."), filename)
-                ))
-            }
+            return .success(updatedStory)
+        } catch let error as RustCoreError {
+            return .failure(workspaceError(for: error))
         } catch {
             return .failure(.attachmentFailure(String(
                 format: L10n.string("The attachment could not be added: %@"),
@@ -1263,28 +1076,25 @@ final class AppStore {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
+        guard projects[projectIndex].stories.contains(where: { $0.id == storyID }) else {
             return .failure(.storyNotFound)
         }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
+        guard let persistenceStore else {
+            return .failure(.persistenceFailure("The local workspace is unavailable"))
         }
-        guard let attachmentIndex = projects[projectIndex].stories[storyIndex].attachments
-            .firstIndex(where: { $0.id == attachmentID }) else {
-            return .failure(.attachmentNotFound)
-        }
-
-        let attachment = projects[projectIndex].stories[storyIndex].attachments[attachmentIndex]
         do {
-            try attachmentStorage.remove(attachment)
-            projects[projectIndex].stories[storyIndex].attachments.remove(at: attachmentIndex)
-            persist(changedProjectID: projectID)
+            projects[projectIndex] = try persistenceStore.removeAttachment(
+                attachmentID: attachmentID,
+                projectID: projectID,
+                storyID: storyID,
+                attachmentsRootURL: attachmentStorage.rootURL
+            )
+            recordPersistedChange(for: projectID)
             return .success(())
+        } catch let error as RustCoreError {
+            return .failure(workspaceError(for: error))
         } catch {
-            return .failure(.attachmentFailure(String(
-                format: L10n.string("The attachment could not be deleted: %@"),
-                error.localizedDescription
-            )))
+            return .failure(.attachmentFailure(error.localizedDescription))
         }
     }
 
@@ -1294,27 +1104,119 @@ final class AppStore {
         from storyID: UUID,
         projectID: UUID
     ) -> Result<UserStory, WorkspaceError> {
+        applyWorkspaceOperation(
+            storyID: storyID,
+            projectID: projectID,
+            operation: [
+                "operation": "delete_acceptance_criterion",
+                "story_id": storyID.uuidString,
+                "criterion_id": criterionID.uuidString
+            ],
+            persistenceMessage: "The criterion could not be deleted"
+        )
+    }
+
+    private func applyWorkspaceOperation(
+        storyID: UUID,
+        projectID: UUID,
+        operation: [String: Any],
+        persistenceMessage: String
+    ) -> Result<UserStory, WorkspaceError> {
+        switch mutateWorkspaceProject(
+            projectID: projectID,
+            operation: operation,
+            persistenceMessage: persistenceMessage
+        ) {
+        case let .success(project):
+            guard let story = project.stories.first(where: { $0.id == storyID }) else {
+                return .failure(.storyNotFound)
+            }
+            return .success(story)
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    private func mutateWorkspaceProject(
+        projectID: UUID,
+        operation: [String: Any],
+        persistenceMessage: String
+    ) -> Result<FSProject, WorkspaceError> {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
-        guard let storyIndex = projects[projectIndex].stories.firstIndex(where: { $0.id == storyID }) else {
-            return .failure(.storyNotFound)
+
+        do {
+            let updatedProject: FSProject
+            if let persistenceStore {
+                // The Rust core reads, mutates, and commits the sole SQLite database
+                // in one operation. Swift only replaces its rendered snapshot.
+                updatedProject = try persistenceStore.applyWorkspaceOperation(
+                    projectID: projectID,
+                    operation: operation
+                )
+            } else {
+                updatedProject = try RustWorkspaceClient().apply(
+                    project: projects[projectIndex],
+                    operation: operation
+                )
+            }
+            projects[projectIndex] = updatedProject
+            if persistenceStore != nil {
+                recordPersistedChange(for: projectID)
+            } else if !persist(changedProjectID: projectID) {
+                return .failure(.persistenceFailure(persistenceError ?? persistenceMessage))
+            }
+            return .success(updatedProject)
+        } catch let error as RustCoreError {
+            return .failure(workspaceError(for: error))
+        } catch {
+            return .failure(.persistenceFailure(error.localizedDescription))
         }
-        guard projects[projectIndex].stories[storyIndex].status != .done else {
-            return .failure(.completedStoryReadOnly)
+    }
+
+    private func coreCriteria(_ criteria: [AcceptanceCriterion]) -> [[String: Any]] {
+        criteria.map {
+            [
+                "id": $0.id.uuidString,
+                "text": $0.text,
+                "isMet": $0.isMet
+            ]
         }
-        guard projects[projectIndex].stories[storyIndex].acceptanceCriteria
-            .contains(where: { $0.id == criterionID }) else {
-            return .failure(.criterionNotFound)
+    }
+
+    private func coreJSONObject<T: Encodable>(_ value: T) throws -> Any {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try JSONSerialization.jsonObject(with: encoder.encode(value))
+    }
+
+    private func workspaceError(for error: RustCoreError) -> WorkspaceError {
+        guard case let .coreFailure(code, message) = error else {
+            return .persistenceFailure(error.localizedDescription)
         }
 
-        projects[projectIndex].stories[storyIndex].acceptanceCriteria.removeAll {
-            $0.id == criterionID
+        let mappedError: WorkspaceError = switch code {
+        case "workspace_story_not_found": .storyNotFound
+        case "workspace_project_not_found": .projectNotFound
+        case "workspace_actor_not_found": .actorNotFound
+        case "workspace_actor_in_use": .actorInUse
+        case "workspace_name_required": .nameRequired
+        case "workspace_prefix_required": .prefixRequired
+        case "workspace_story_title_required": .titleRequired
+        case "workspace_story_want_required": .wantRequired
+        case "workspace_story_outcome_required": .outcomeRequired
+        case "workspace_attachments_required": .attachmentsRequired
+        case "workspace_attachment_not_found": .attachmentNotFound
+        case "workspace_attachment_limit": .attachmentFailure(L10n.string("A story can have up to 10 attachments."))
+        case "workspace_attachment_size_limit": .attachmentFailure(L10n.string("Attachments for a story cannot exceed 50 MB."))
+        case "workspace_criterion_not_found": .criterionNotFound
+        case "completed_story_read_only": .completedStoryReadOnly
+        case "incomplete_acceptance_criteria": .incompleteAcceptanceCriteria
+        case "acceptance_criterion_required": .acceptanceCriterionRequired
+        default: .persistenceFailure(message)
         }
-        guard persist(changedProjectID: projectID) else {
-            return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be deleted"))
-        }
-        return .success(projects[projectIndex].stories[storyIndex])
+        return mappedError
     }
 
     @discardableResult
@@ -1325,20 +1227,26 @@ final class AppStore {
             // SQLite is the source of truth. A remote sync is only scheduled
             // after this write succeeds and can never hold up local editing.
             try persistenceStore.save(projects)
-            persistenceError = nil
-            if
-                let changedProjectID,
-                let project = projects.first(where: { $0.id == changedProjectID }),
-                project.gitRepository?.remoteURL != nil
-            {
-                localChangeVersions[changedProjectID, default: 0] &+= 1
-                syncScheduler.recordLocalChange(for: changedProjectID)
+            if let changedProjectID {
+                recordPersistedChange(for: changedProjectID)
+            } else {
+                persistenceError = nil
             }
             return true
         } catch {
             persistenceError = error.localizedDescription
             return false
         }
+    }
+
+    private func recordPersistedChange(for projectID: UUID) {
+        persistenceError = nil
+        guard let project = projects.first(where: { $0.id == projectID }),
+              project.gitRepository?.remoteURL != nil else {
+            return
+        }
+        localChangeVersions[projectID, default: 0] &+= 1
+        syncScheduler.recordLocalChange(for: projectID)
     }
 }
 

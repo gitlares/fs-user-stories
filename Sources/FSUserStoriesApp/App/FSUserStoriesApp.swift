@@ -79,13 +79,20 @@ struct FSUserStoriesApp: App {
         .defaultSize(width: 760, height: 760)
         .windowResizability(.contentMinSize)
 
-        MenuBarExtra(
-            "FS User Stories",
-            systemImage: "checkmark.square",
-            isInserted: $menuBarExtraVisible
-        ) {
+        MenuBarExtra(isInserted: $menuBarExtraVisible) {
             MenuBarView(store: store)
+        } label: {
+            MenuBarIconLabel()
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+private struct MenuBarIconLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Image(nsImage: AppResources.menuBarIcon(darkAppearance: colorScheme == .dark))
+            .accessibilityLabel("FS User Stories")
     }
 }
