@@ -460,10 +460,10 @@ fn connect_shared_repository(
         .git_repository
         .as_mut()
         .ok_or("The managed local repository is not ready")?;
-    RepositoryEngine::new(&link.local_path)
+    let remote_url = RepositoryEngine::new(&link.local_path)
         .connect(remote_url)
         .map_err(|error| error.to_string())?;
-    link.remote_url = Some(remote_url.into());
+    link.remote_url = Some(remote_url);
     save_updated_project(config, project.clone())?;
     Ok(json!({"project": project}))
 }
@@ -603,7 +603,7 @@ pub fn connect_stored_project_repository(
     let link = updated.git_repository.as_mut().ok_or_else(|| {
         CoreError::StoredWorkspaceOperation("The managed local repository is not ready".into())
     })?;
-    RepositoryEngine::new(&link.local_path).connect(&remote_url)?;
+    let remote_url = RepositoryEngine::new(&link.local_path).connect(&remote_url)?;
     link.remote_url = Some(remote_url);
     let current = project(&config, &project_id).map_err(CoreError::StoredWorkspaceOperation)?;
     ensure_workspace_unchanged(&initial, &current)?;
@@ -651,6 +651,7 @@ pub fn join_stored_project(
     remote_url: String,
     access_token: Option<String>,
 ) -> Result<Value, CoreError> {
+    let remote_url = crate::invitation::normalize_remote_url(&remote_url)?;
     fs::create_dir_all(&repositories_root)?;
     let temporary_path = repositories_root.join(format!("Import-{}", Uuid::new_v4()));
     let snapshot =

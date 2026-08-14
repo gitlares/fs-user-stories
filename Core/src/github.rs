@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
+use crate::invitation::normalize_remote_url;
 use crate::protocol::CoreError;
 
 const API_VERSION: &str = "2022-11-28";
@@ -285,7 +286,8 @@ fn repository_name(value: &str) -> String {
 }
 
 fn github_repository_path(value: &str) -> Option<String> {
-    let normalized = value.trim().trim_end_matches(".git");
+    let canonical = normalize_remote_url(value).ok()?;
+    let normalized = canonical.trim_end_matches(".git");
     let path = if let Some(path) = normalized.strip_prefix("git@github.com:") {
         path
     } else if let Some(path) = normalized.strip_prefix("https://github.com/") {

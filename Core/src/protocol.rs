@@ -285,7 +285,7 @@ pub fn execute(command: Command) -> Result<Response, CoreError> {
             repository_path,
             remote_url,
         } => {
-            RepositoryEngine::new(repository_path).connect(&remote_url)?;
+            let remote_url = RepositoryEngine::new(repository_path).connect(&remote_url)?;
             Response::success(json!({"remoteURL": remote_url}))
         }
         Command::CloneShared {

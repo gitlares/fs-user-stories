@@ -13,7 +13,7 @@ use git2::{
 
 use crate::{
     archive::{AttachmentSources, ProjectSnapshot},
-    invitation::validate_remote_url,
+    invitation::normalize_remote_url,
     protocol::CoreError,
     sync::{ConflictResolution, MergeResult, apply_resolutions, merge_snapshots},
 };
@@ -59,17 +59,17 @@ impl RepositoryEngine {
         Ok(digest)
     }
 
-    pub fn connect(&self, remote_url: &str) -> Result<(), CoreError> {
-        validate_remote_url(remote_url)?;
+    pub fn connect(&self, remote_url: &str) -> Result<String, CoreError> {
+        let remote_url = normalize_remote_url(remote_url)?;
         let repository = Repository::open(&self.root)?;
         ensure_sync_branch(&repository)?;
         match repository.find_remote(DEFAULT_REMOTE) {
-            Ok(_) => repository.remote_set_url(DEFAULT_REMOTE, remote_url)?,
+            Ok(_) => repository.remote_set_url(DEFAULT_REMOTE, &remote_url)?,
             Err(_) => {
-                repository.remote(DEFAULT_REMOTE, remote_url)?;
+                repository.remote(DEFAULT_REMOTE, &remote_url)?;
             }
         }
-        Ok(())
+        Ok(remote_url)
     }
 
     pub fn clone_shared(
@@ -77,7 +77,7 @@ impl RepositoryEngine {
         destination: &Path,
         access_token: Option<&str>,
     ) -> Result<ProjectSnapshot, CoreError> {
-        validate_remote_url(remote_url)?;
+        let remote_url = normalize_remote_url(remote_url)?;
         if destination.exists() && destination.read_dir()?.next().is_some() {
             return Err(CoreError::RepositoryNotEmpty);
         }
@@ -87,7 +87,7 @@ impl RepositoryEngine {
         let mut builder = RepoBuilder::new();
         builder.fetch_options(fetch);
         builder.branch(SYNC_BRANCH);
-        builder.clone(remote_url, destination)?;
+        builder.clone(&remote_url, destination)?;
         ProjectSnapshot::read(destination)
     }
 

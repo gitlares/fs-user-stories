@@ -28,7 +28,7 @@ impl ProjectInvitation {
                 "Project id and name are required".into(),
             ));
         }
-        validate_remote_url(&remote_url)?;
+        let remote_url = normalize_remote_url(&remote_url)?;
         if default_branch.trim().is_empty() {
             return Err(CoreError::InvalidInvitation(
                 "Default branch is required".into(),
@@ -54,20 +54,36 @@ impl ProjectInvitation {
         let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(value)
             .map_err(|error| CoreError::InvalidInvitation(error.to_string()))?;
-        let invitation: Self = serde_json::from_slice(&bytes)?;
+        let mut invitation: Self = serde_json::from_slice(&bytes)?;
         if invitation.format_version != Self::FORMAT_VERSION {
             return Err(CoreError::InvalidInvitation(format!(
                 "Unsupported invitation version {}",
                 invitation.format_version
             )));
         }
-        validate_remote_url(&invitation.remote_url)?;
+        invitation.remote_url = normalize_remote_url(&invitation.remote_url)?;
         Ok(invitation)
     }
 }
 
 pub fn validate_remote_url(value: &str) -> Result<(), CoreError> {
+    normalize_remote_url(value).map(|_| ())
+}
+
+pub fn normalize_remote_url(value: &str) -> Result<String, CoreError> {
     let value = value.trim();
+    if value.contains('\n') || value.contains('\r') {
+        return Err(CoreError::InvalidRemote("Repository URL is invalid".into()));
+    }
+    let normalized = if value.starts_with("github.com:")
+        || value.starts_with("gitlab.com:")
+        || value.starts_with("bitbucket.org:")
+    {
+        format!("git@{value}")
+    } else {
+        value.into()
+    };
+    let value = normalized.as_str();
     let is_https = value.starts_with("https://");
     let is_ssh = value.starts_with("ssh://")
         || (value.contains('@') && value.contains(':') && !value.contains("//"));
@@ -76,10 +92,7 @@ pub fn validate_remote_url(value: &str) -> Result<(), CoreError> {
             "Use an HTTPS or SSH repository URL".into(),
         ));
     }
-    if value.contains('\n') || value.contains('\r') {
-        return Err(CoreError::InvalidRemote("Repository URL is invalid".into()));
-    }
-    Ok(())
+    Ok(normalized)
 }
 
 #[cfg(test)]
@@ -104,5 +117,13 @@ mod tests {
     fn rejects_local_and_insecure_remotes() {
         assert!(validate_remote_url("file:///tmp/repository").is_err());
         assert!(validate_remote_url("http://example.com/repository").is_err());
+    }
+
+    #[test]
+    fn normalizes_common_provider_ssh_shorthand() {
+        assert_eq!(
+            normalize_remote_url("github.com:gitlares/example.git").unwrap(),
+            "git@github.com:gitlares/example.git"
+        );
     }
 }

@@ -26,9 +26,9 @@
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>CFBundleVersion</key>
-    <string>6</string>
+    <string>7</string>
     <key>FSReleaseName</key>
-    <string>Alpha 6</string>
+    <string>Alpha 7</string>
     <key>FSGitHubOAuthClientID</key>
 	<string>Ov23liEDQnlgdtJTGCUt</string>
     <key>LSMinimumSystemVersion</key>

@@ -27,6 +27,11 @@ struct GitHubDeviceAuthorization: Codable, Sendable {
     let verificationURL: URL
     let expiresAt: Date
     let interval: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case deviceCode, userCode, expiresAt, interval
+        case verificationURL = "verificationUrl"
+    }
 }
 
 struct GitHubRepository: Codable, Sendable {
@@ -34,6 +39,12 @@ struct GitHubRepository: Codable, Sendable {
     let fullName: String
     let cloneURL: String
     let webURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case name, fullName
+        case cloneURL = "cloneUrl"
+        case webURL = "webUrl"
+    }
 }
 
 /// Thin macOS adapter. GitHub HTTP, polling, naming, and validation live in Rust.

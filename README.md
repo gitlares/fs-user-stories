@@ -49,7 +49,7 @@ agents, and uses Git only when the user chooses to share a project.
 > FS User Stories does not manage your team, your dates, or your company. It only
 > makes clear what needs to be built.
 
-## Alpha 6 — Version 0.1.0 (Build 6)
+## Alpha 7 — Version 0.1.0 (Build 7)
 
 The first team-testing alpha is already a functional product, not a static UI
 prototype. It includes a signed and notarized Apple Silicon application with the
@@ -84,7 +84,7 @@ following capabilities.
   feed.
 - Export all, Active, Completed, Draft, or manually selected stories into one
   readable Markdown file; review and import selected stories from the same open
-  format. Attachments are intentionally excluded from this transfer in Alpha 6.
+  format. Attachments are intentionally excluded from this transfer in Alpha 7.
 
 ### Managed attachments
 
@@ -111,7 +111,7 @@ The app runs a loopback-only MCP server while it is open. The MCP screen shows
 the live status, URL, port, and connection instructions; the same status is also
 visible in the app footer and menu bar.
 
-Alpha 6 exposes 27 tools covering the product's real operations:
+Alpha 7 exposes 27 tools covering the product's real operations:
 
 - Describe the application and list or inspect projects.
 - Create projects and inspect repository status.
@@ -169,7 +169,7 @@ although a dedicated repository remains the clearest choice for a team.
 
 ## Install
 
-Alpha 6 currently requires an Apple Silicon Mac running macOS 26 or later.
+Alpha 7 currently requires an Apple Silicon Mac running macOS 26 or later.
 
 1. Download the DMG from [GitHub Releases](https://github.com/gitlares/fs-user-stories/releases).
 2. Open the DMG and drag **FS User Stories** to **Applications**.
@@ -184,7 +184,7 @@ This is an alpha intended for team testing. Back up important project data and
 
 ## Road to Version 1
 
-**Alpha 6 is an early macOS release for real-world testing with small teams.**
+**Alpha 7 is an early macOS release for real-world testing with small teams.**
 It is the place to validate the local-first workflow, Git sharing, and local MCP
 before the first stable release.
 

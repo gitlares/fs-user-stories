@@ -2,6 +2,26 @@
 
 All notable public changes to FS User Stories are documented here.
 
+## 0.1.0 Alpha 7 — 2026-08-14
+
+### Fixed
+
+- Restored GitHub Device Flow authorization after the Rust-core migration by
+  aligning the `verificationUrl`, `cloneUrl`, and `webUrl` protocol keys with
+  their native Swift URL properties.
+- Restored all affected sharing entry points: Create on GitHub, join by
+  invitation, and open an existing private GitHub repository.
+- Repository fields now accept common provider SSH shorthand such as
+  `github.com:owner/repository.git` and normalize it to the canonical
+  `git@github.com:owner/repository.git` form.
+
+### Verified
+
+- The real shared-project repository clones and loads through the Rust stored
+  join command.
+- Contract tests cover GitHub authorization, repository creation responses, and
+  joined-project decoding across the Rust/Swift boundary.
+
 ## 0.1.0 Alpha 6 — 2026-08-14
 
 ### Changed
