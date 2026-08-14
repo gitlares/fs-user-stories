@@ -23,6 +23,24 @@ requirements without turning them into a project-management system. It keeps the
 product deliberately small: projects, profiles, stories, acceptance criteria,
 one notes field, and attachments.
 
+## Why this exists
+
+FS User Stories began with a practical need: a couple maintaining several
+projects together. One person writes code; the other understands the product,
+what should be built, and why. They often only need a clear, shared place to
+write down a feature so it can be implemented.
+
+Tools such as Jira, Asana, and Trello can be excellent for larger teams, but for
+this workflow they add accounts, setup, process, cost, and more surface area
+than the work requires. The same friction appears with many hosted MCP
+integrations: access can be paid or limited, the round trip can be slow, and
+large tool responses consume unnecessary agent context.
+
+This app reduces that friction. The stories stay on the computer, collaboration
+is optional through a repository the team already controls, and the local MCP
+server gives any compatible agent a small, direct interface to the same data.
+No vendor account is required by FS User Stories.
+
 There are no FS User Stories accounts, no telemetry, no required cloud, no
 subscriptions, no sprints, no estimates, no assignees, no deadlines, and no
 dashboards. The app works offline, exposes a local MCP server for compatible
