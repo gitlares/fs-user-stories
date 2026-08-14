@@ -31,6 +31,7 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
 struct FSUserStoriesApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleDelegate.self) private var appDelegate
     @AppStorage("menuBarExtraVisible") private var menuBarExtraVisible = true
+    @Environment(\.scenePhase) private var scenePhase
     @State private var store: AppStore
 
     init() {
@@ -50,6 +51,10 @@ struct FSUserStoriesApp: App {
         WindowGroup("FS User Stories", id: "workspace") {
             WorkspaceView(store: store)
                 .frame(minWidth: 980, minHeight: 640)
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active else { return }
+                    store.applicationDidBecomeActive()
+                }
         }
         .defaultSize(width: 1180, height: 760)
         .windowToolbarStyle(.unified)

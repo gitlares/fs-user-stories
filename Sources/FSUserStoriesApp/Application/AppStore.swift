@@ -31,6 +31,14 @@ final class AppStore {
     private let gitHubService: GitHubService
     @ObservationIgnored private var sessionGitHubAccessToken: String?
     @ObservationIgnored private var localMCPServer: LocalMCPServer?
+    @ObservationIgnored private var localChangeVersions: [UUID: UInt] = [:]
+    @ObservationIgnored private var synchronizingProjectIDs = Set<UUID>()
+    @ObservationIgnored private var blockedSyncProjectIDs = Set<UUID>()
+    @ObservationIgnored private var automaticMaintenanceTask: Task<Void, Never>?
+    @ObservationIgnored private lazy var syncScheduler = ProjectSyncScheduler { [weak self] projectID in
+        guard let self else { return .blocked }
+        return await self.runScheduledSynchronization(for: projectID)
+    }
 
     init(
         projects: [FSProject] = [],
@@ -58,6 +66,7 @@ final class AppStore {
         )
         store.startMCPServer()
         store.ensureManagedRepositories()
+        store.startAutomaticSynchronization()
         return store
     }
 
@@ -265,6 +274,7 @@ final class AppStore {
                 )
             }
             pendingSyncConflicts = []
+            blockedSyncProjectIDs.remove(projectID)
             projectSyncState = .succeeded(synchronization.link.lastSyncedAt ?? .now)
             return .success(())
         } catch {
@@ -280,12 +290,17 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
+        guard synchronizingProjectIDs.insert(projectID).inserted else {
+            return .success(())
+        }
+        defer { synchronizingProjectIDs.remove(projectID) }
         let attachmentURLs = Dictionary(
             uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
                 attachmentURL(for: attachment).map { (attachment.id, $0) }
             }
         )
         let accessToken = githubAccessToken()
+        let localChangeVersion = localChangeVersions[projectID, default: 0]
         projectSyncState = .working
         do {
             let synchronization = try await Task.detached {
@@ -298,10 +313,17 @@ final class AppStore {
             guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
                 return .failure(.projectNotFound)
             }
-            projects[projectIndex] = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
+            if localChangeVersions[projectID, default: 0] == localChangeVersion {
+                projects[projectIndex] = try projectFromSynchronizedSnapshot(
+                    synchronization.snapshot,
+                    link: synchronization.link
+                )
+            } else {
+                // Never overwrite an edit that happened while Git was working.
+                // The scheduler will make one follow-up pass with the newer snapshot.
+                projects[projectIndex].gitRepository = synchronization.link
+                syncScheduler.recordLocalChange(for: projectID)
+            }
             guard persist() else {
                 throw WorkspaceError.persistenceFailure(
                     persistenceError ?? "The synchronization state could not be saved"
@@ -311,6 +333,7 @@ final class AppStore {
             return .success(())
         } catch let RustCoreError.syncConflicts(conflicts) {
             pendingSyncConflicts = conflicts
+            blockedSyncProjectIDs.insert(projectID)
             projectSyncState = .failed(L10n.string("Some shared changes need your decision."))
             return .failure(.persistenceFailure(L10n.string("Some shared changes need your decision.")))
         } catch {
@@ -644,6 +667,58 @@ final class AppStore {
     func selectStory(_ storyID: UUID, in projectID: UUID) {
         selectedProjectID = projectID
         selectedStoryID = storyID
+        selectedProjectDidChange()
+    }
+
+    func selectedProjectDidChange() {
+        guard let selectedProject else { return }
+        syncScheduler.projectBecameActive(selectedProject)
+    }
+
+    func applicationDidBecomeActive() {
+        selectedProjectDidChange()
+    }
+
+    private func startAutomaticSynchronization() {
+        selectedProjectDidChange()
+        automaticMaintenanceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: ProjectSyncScheduler.Policy.maintenanceInterval)
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                scheduleDueProjectRefreshes()
+            }
+        }
+    }
+
+    private func scheduleDueProjectRefreshes() {
+        let activeProject = selectedProject
+        let inactiveProjects = projects.filter { $0.id != activeProject?.id }
+        syncScheduler.scheduleMaintenance(
+            activeProject: activeProject,
+            inactiveProjects: inactiveProjects
+        )
+    }
+
+    private func runScheduledSynchronization(for projectID: UUID) async -> ProjectSyncScheduler.AttemptOutcome {
+        guard
+            let project = projects.first(where: { $0.id == projectID }),
+            project.gitRepository?.remoteURL != nil
+        else {
+            return .blocked
+        }
+        guard !blockedSyncProjectIDs.contains(projectID) else {
+            return .blocked
+        }
+        switch await synchronizeProject(projectID) {
+        case .success:
+            return .succeeded
+        case .failure:
+            return .retryLater
+        }
     }
 
     func requestStoryCreation(in projectID: UUID) {
@@ -665,7 +740,7 @@ final class AppStore {
             role: role.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         projects[projectIndex].actors.append(actor)
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The actor could not be saved"))
         }
         return .success(actor)
@@ -690,7 +765,7 @@ final class AppStore {
         projects[projectIndex].actors[actorIndex].name = normalizedName
         projects[projectIndex].actors[actorIndex].role = role
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The actor could not be saved"))
         }
         return .success(projects[projectIndex].actors[actorIndex])
@@ -709,7 +784,7 @@ final class AppStore {
         }
 
         projects[projectIndex].actors.remove(at: actorIndex)
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The actor could not be deleted"))
         }
         return .success(())
@@ -754,7 +829,7 @@ final class AppStore {
 
         projects[projectIndex].stories.append(story)
         selectedStoryID = story.id
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The story could not be saved"))
         }
         return .success(story)
@@ -802,7 +877,7 @@ final class AppStore {
         projects[projectIndex].stories[storyIndex].outcome = outcome
             .trimmingCharacters(in: .whitespacesAndNewlines)
         projects[projectIndex].stories[storyIndex].acceptanceCriteria = normalizedCriteria
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The story could not be saved"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
@@ -848,7 +923,7 @@ final class AppStore {
             return .failure(.criterionNotFound)
         }
         projects[projectIndex].stories[storyIndex].acceptanceCriteria[criterionIndex].isMet = isMet
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be saved"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
@@ -875,7 +950,7 @@ final class AppStore {
         projects[projectIndex].stories[storyIndex].acceptanceCriteria.append(
             AcceptanceCriterion(text: trimmedText)
         )
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be saved"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
@@ -900,7 +975,7 @@ final class AppStore {
         }
 
         projects[projectIndex].stories[storyIndex].status = status
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The story status could not be saved"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
@@ -931,7 +1006,7 @@ final class AppStore {
 
         projects[projectIndex].stories.append(duplicatedStory)
         selectedStoryID = duplicatedStory.id
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The story could not be duplicated"))
         }
         return .success(duplicatedStory)
@@ -955,7 +1030,7 @@ final class AppStore {
 
         projects[projectIndex].stories[storyIndex].notes = notes
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The notes could not be saved"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
@@ -977,7 +1052,7 @@ final class AppStore {
                 ? nil
                 : remainingStories[min(storyIndex, remainingStories.count - 1)].id
         }
-        if persist() {
+        if persist(changedProjectID: projectID) {
             try? attachmentStorage?.removeStoryDirectory(projectID: projectID, storyID: storyID)
             return .success(())
         }
@@ -1053,7 +1128,7 @@ final class AppStore {
             }
 
             projects[projectIndex].stories[storyIndex].attachments.append(contentsOf: importedAttachments)
-            guard persist() else {
+            guard persist(changedProjectID: projectID) else {
                 projects[projectIndex].stories[storyIndex].attachments.removeAll {
                     importedAttachments.contains($0)
                 }
@@ -1122,7 +1197,7 @@ final class AppStore {
         do {
             try attachmentStorage.remove(attachment)
             projects[projectIndex].stories[storyIndex].attachments.remove(at: attachmentIndex)
-            persist()
+            persist(changedProjectID: projectID)
             return .success(())
         } catch {
             return .failure(.attachmentFailure(String(
@@ -1155,19 +1230,27 @@ final class AppStore {
         projects[projectIndex].stories[storyIndex].acceptanceCriteria.removeAll {
             $0.id == criterionID
         }
-        guard persist() else {
+        guard persist(changedProjectID: projectID) else {
             return .failure(.persistenceFailure(persistenceError ?? "The criterion could not be deleted"))
         }
         return .success(projects[projectIndex].stories[storyIndex])
     }
 
     @discardableResult
-    private func persist() -> Bool {
+    private func persist(changedProjectID: UUID? = nil) -> Bool {
         guard let persistenceStore else { return true }
 
         do {
             try persistenceStore.save(projects)
             persistenceError = nil
+            if
+                let changedProjectID,
+                let project = projects.first(where: { $0.id == changedProjectID }),
+                project.gitRepository?.remoteURL != nil
+            {
+                localChangeVersions[changedProjectID, default: 0] &+= 1
+                syncScheduler.recordLocalChange(for: changedProjectID)
+            }
             return true
         } catch {
             persistenceError = error.localizedDescription

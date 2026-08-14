@@ -181,6 +181,9 @@ struct WorkspaceView: View {
         .onChange(of: store.pendingWorkspaceAction) {
             handlePendingWorkspaceAction()
         }
+        .onChange(of: store.selectedProjectID) {
+            store.selectedProjectDidChange()
+        }
     }
 
     private var projectSidebar: some View {
