@@ -13,6 +13,7 @@
 <p align="center">
   <a href="https://gitlares.github.io/fs-user-stories/">Website</a> ·
   <a href="https://github.com/gitlares/fs-user-stories/releases">Download</a> ·
+  <a href="https://www.paypal.com/donate/?hosted_button_id=7RDCBR3QXXEMJ">♥ Support</a> ·
   <a href="https://github.com/gitlares/fs-user-stories/issues">Issues</a> ·
   <a href="./LICENSE">MIT License</a>
 </p>
