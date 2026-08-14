@@ -4,7 +4,7 @@
   <img src="Design/AppIcon-master.png" alt="FS User Stories icon" width="128">
 </p>
 
-<h3 align="center">Fucking Simple User Stories</h3>
+<h3 align="center">Fast &amp; Simple User Stories</h3>
 
 <p align="center">
   Your stories, on your computer. Share with Git. Nothing else.

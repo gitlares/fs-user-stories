@@ -4,7 +4,7 @@
 
 **Nombre público:** FS User Stories  
 **Significado público:** Fast & Simple User Stories  
-**Filosofía interna:** Fucking Simple User Stories  
+**Filosofía de producto:** Fast & Simple User Stories  
 **Licencia:** `MIT`
 **Modelo:** local-first, sin cuenta obligatoria, sin servidor propio y con GitHub opcional únicamente para compartir proyectos.
 
