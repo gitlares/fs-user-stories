@@ -30,11 +30,11 @@ struct RustCoreClient: Sendable {
             self.executableURL = executableURL
             return
         }
-        let bundledURL = Bundle.module.url(
+        let bundledURL = AppResources.bundle.url(
             forResource: "fs-user-stories-core",
             withExtension: nil,
             subdirectory: "Core"
-        ) ?? Bundle.module.url(
+        ) ?? AppResources.bundle.url(
             forResource: "fs-user-stories-core",
             withExtension: nil
         )

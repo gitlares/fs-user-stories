@@ -12,7 +12,7 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
         // CFBundleIconFile from Support/Info.plist while developing. Keep the
         // correct application identity in the Dock and app switcher in both the
         // package-run and packaged .app paths.
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = AppResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
         }

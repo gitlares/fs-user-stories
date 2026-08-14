@@ -8,13 +8,13 @@ enum L10n {
         guard
             let flagIndex = arguments.firstIndex(of: "--language"),
             arguments.indices.contains(flagIndex + 1),
-            let path = Bundle.module.path(
+            let path = AppResources.bundle.path(
                 forResource: arguments[flagIndex + 1],
                 ofType: "lproj"
             ),
             let localizedBundle = Bundle(path: path)
         else {
-            return .module
+            return AppResources.bundle
         }
 
         return localizedBundle

@@ -73,7 +73,7 @@ struct GitHubService: Sendable {
     }
 
     private static func bundledClientID() -> String? {
-        guard let url = Bundle.module.url(forResource: "GitHub", withExtension: "plist"),
+        guard let url = AppResources.bundle.url(forResource: "GitHub", withExtension: "plist"),
               let data = try? Data(contentsOf: url),
               let object = try? PropertyListSerialization.propertyList(
                 from: data,
