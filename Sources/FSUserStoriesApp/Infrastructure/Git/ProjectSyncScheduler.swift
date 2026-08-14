@@ -45,6 +45,10 @@ final class ProjectSyncScheduler {
         schedule(projectID, after: Policy.localChangeDebounce, replacingExistingDelay: true)
     }
 
+    func requestImmediateSync(for projectID: UUID) {
+        schedule(projectID, after: .zero, replacingExistingDelay: true)
+    }
+
     func projectBecameActive(_ project: FSProject, now: Date = .now) {
         guard project.gitRepository?.remoteURL != nil else { return }
         guard isDue(project.gitRepository?.lastSyncedAt, interval: Policy.activeProjectRefresh, now: now) else {

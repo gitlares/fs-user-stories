@@ -501,41 +501,15 @@ final class AppStore {
         }
     }
 
-    func synchronizeProjectFromMCP(_ projectID: UUID) -> Result<FSProject, WorkspaceError> {
-        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+    func queueProjectSynchronizationFromMCP(_ projectID: UUID) -> Result<FSProject, WorkspaceError> {
+        guard let project = projects.first(where: { $0.id == projectID }) else {
             return .failure(.projectNotFound)
         }
-        guard let gitSyncService else {
-            return .failure(.persistenceFailure("The synchronization core is unavailable"))
+        guard project.gitRepository?.remoteURL != nil else {
+            return .failure(.persistenceFailure(L10n.string("Connect a shared repository first.")))
         }
-        let project = projects[projectIndex]
-        let attachmentURLs = Dictionary(
-            uniqueKeysWithValues: project.stories.flatMap(\.attachments).compactMap { attachment in
-                attachmentURL(for: attachment).map { (attachment.id, $0) }
-            }
-        )
-        do {
-            let synchronization = try gitSyncService.synchronize(
-                project,
-                attachmentURLs: attachmentURLs,
-                accessToken: githubAccessToken()
-            )
-            projects[projectIndex] = try projectFromSynchronizedSnapshot(
-                synchronization.snapshot,
-                link: synchronization.link
-            )
-            guard persist() else {
-                throw WorkspaceError.persistenceFailure(
-                    persistenceError ?? "The synchronization state could not be saved"
-                )
-            }
-            return .success(projects[projectIndex])
-        } catch let RustCoreError.syncConflicts(conflicts) {
-            pendingSyncConflicts = conflicts
-            return .failure(.persistenceFailure(L10n.string("Some shared changes need your decision.")))
-        } catch {
-            return .failure(.persistenceFailure(error.localizedDescription))
-        }
+        syncScheduler.requestImmediateSync(for: projectID)
+        return .success(project)
     }
 
     func projectInvitationFromMCP(_ projectID: UUID) -> Result<String, WorkspaceError> {

@@ -280,8 +280,13 @@ extension AppStore {
             return mcpError("project_id is required")
         }
         return applicationResult(
-            synchronizeProjectFromMCP(projectID),
-            transform: mcpProject
+            queueProjectSynchronizationFromMCP(projectID),
+            transform: { project in
+                .object([
+                    "project": mcpProject(project),
+                    "synchronization": .string("scheduled")
+                ])
+            }
         )
     }
 
@@ -868,7 +873,7 @@ private extension AppStore {
             ),
             tool(
                 "synchronize_project",
-                "Fetch shared changes, merge by project entity, and publish local changes. Requires explicit confirmation.",
+                "Queue a background two-way synchronization. It fetches shared changes, merges by project entity, and publishes local changes. Requires explicit confirmation.",
                 properties: [
                     "project_id": stringProperty("Project UUID")
                 ].merging(confirmProperty) { _, new in new },
