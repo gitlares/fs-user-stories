@@ -48,7 +48,9 @@ struct FSUserStoriesApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("FS User Stories", id: "workspace") {
+        // The workspace is intentionally a single window. Menu-bar actions must
+        // reveal this window, never create a second workspace instance.
+        Window("FS User Stories", id: "workspace") {
             WorkspaceView(store: store)
                 .frame(minWidth: 980, minHeight: 640)
                 .onChange(of: scenePhase) { _, phase in

@@ -96,7 +96,7 @@ struct MenuBarView: View {
 
     private func showWorkspace() {
         openWindow(id: "workspace")
-        NSApplication.shared.activate()
+        bringApplicationToFront(windowTitle: "FS User Stories")
     }
 
     private var mcpStatusTitle: String {
@@ -127,6 +127,17 @@ struct MenuBarView: View {
 
     private func showMCPConnection() {
         openWindow(id: "mcp-connection")
-        NSApplication.shared.activate()
+        bringApplicationToFront(windowTitle: L10n.string("MCP Connection"))
+    }
+
+    private func bringApplicationToFront(windowTitle: String) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async {
+            guard let window = NSApplication.shared.windows.last(where: { $0.title == windowTitle }) else {
+                return
+            }
+            window.deminiaturize(nil)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 }
