@@ -9,16 +9,26 @@ import Foundation
 /// Projects without a configured remote never enter this scheduler.
 @MainActor
 final class ProjectSyncScheduler {
-    enum Policy {
-        static let localChangeDebounce: Duration = .seconds(8)
-        static let maximumLocalChangeDelay: TimeInterval = 45
-        static let activeProjectActivationDebounce: Duration = .seconds(1)
-        static let activeProjectRefresh: TimeInterval = 2 * 60
-        static let inactiveProjectRefresh: TimeInterval = 30 * 60
-        static let maintenanceInterval: Duration = .seconds(60)
-        static let retryDelays: [Duration] = [
-            .seconds(60), .seconds(5 * 60), .seconds(15 * 60), .seconds(60 * 60)
-        ]
+    struct Policy: Sendable {
+        let localChangeDebounce: Duration
+        let maximumLocalChangeDelay: TimeInterval
+        let activeProjectActivationDebounce: Duration
+        let activeProjectRefresh: TimeInterval
+        let inactiveProjectRefresh: TimeInterval
+        let maintenanceInterval: Duration
+        let retryDelays: [Duration]
+
+        static let production = Policy(
+            localChangeDebounce: .seconds(3),
+            maximumLocalChangeDelay: 15,
+            activeProjectActivationDebounce: .seconds(1),
+            activeProjectRefresh: 30,
+            inactiveProjectRefresh: 30 * 60,
+            maintenanceInterval: .seconds(10),
+            retryDelays: [
+                .seconds(60), .seconds(5 * 60), .seconds(15 * 60), .seconds(60 * 60)
+            ]
+        )
     }
 
     enum AttemptOutcome: Equatable {
@@ -29,6 +39,7 @@ final class ProjectSyncScheduler {
 
     typealias SynchronizationOperation = @MainActor (UUID) async -> AttemptOutcome
 
+    private let policy: Policy
     private let synchronizationOperation: SynchronizationOperation
     private var delayedTasks: [UUID: Task<Void, Never>] = [:]
     private var queuedProjectIDs: [UUID] = []
@@ -41,7 +52,11 @@ final class ProjectSyncScheduler {
     private var firstLocalChangeAt: [UUID: Date] = [:]
     private var activeProjectTask: Task<Void, Never>?
 
-    init(synchronizationOperation: @escaping SynchronizationOperation) {
+    init(
+        policy: Policy = .production,
+        synchronizationOperation: @escaping SynchronizationOperation
+    ) {
+        self.policy = policy
         self.synchronizationOperation = synchronizationOperation
     }
 
@@ -52,8 +67,8 @@ final class ProjectSyncScheduler {
 
         // Keep batching rapid edits, but never postpone a publish forever for a
         // continuously edited project.
-        let remaining = max(0, Policy.maximumLocalChangeDelay - now.timeIntervalSince(firstChange))
-        let debounce = min(Policy.localChangeDebounce, .milliseconds(Int64(remaining * 1_000)))
+        let remaining = max(0, policy.maximumLocalChangeDelay - now.timeIntervalSince(firstChange))
+        let debounce = min(policy.localChangeDebounce, .milliseconds(Int64(remaining * 1_000)))
         schedule(projectID, after: debounce, replacingExistingDelay: true)
     }
 
@@ -63,13 +78,14 @@ final class ProjectSyncScheduler {
 
     func projectBecameActive(_ project: FSProject, now: Date = .now) {
         guard project.gitRepository?.remoteURL != nil else { return }
-        guard isDue(project.gitRepository?.lastSyncedAt, interval: Policy.activeProjectRefresh, now: now) else {
+        guard isDue(project.gitRepository?.lastSyncedAt, interval: policy.activeProjectRefresh, now: now) else {
             return
         }
+        let activationDebounce = policy.activeProjectActivationDebounce
         activeProjectTask?.cancel()
         activeProjectTask = Task { [weak self] in
             do {
-                try await Task.sleep(for: Policy.activeProjectActivationDebounce)
+                try await Task.sleep(for: activationDebounce)
             } catch {
                 return
             }
@@ -94,7 +110,7 @@ final class ProjectSyncScheduler {
         let eligibleInactive = inactiveProjects.filter {
             $0.gitRepository?.remoteURL != nil && isDue(
                 $0.gitRepository?.lastSyncedAt,
-                interval: Policy.inactiveProjectRefresh,
+                interval: policy.inactiveProjectRefresh,
                 now: now
             )
         }
@@ -163,7 +179,7 @@ final class ProjectSyncScheduler {
                 case .retryLater:
                     let failureCount = failureCounts[projectID, default: 0]
                     failureCounts[projectID] = failureCount + 1
-                    let delay = Policy.retryDelays[min(failureCount, Policy.retryDelays.count - 1)]
+                    let delay = policy.retryDelays[min(failureCount, policy.retryDelays.count - 1)]
                     schedule(projectID, after: delay, replacingExistingDelay: true)
                 case .blocked:
                     // A conflict requires a human decision. Do not retry it.

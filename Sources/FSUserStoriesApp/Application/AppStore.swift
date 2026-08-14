@@ -658,7 +658,7 @@ final class AppStore {
         automaticMaintenanceTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: ProjectSyncScheduler.Policy.maintenanceInterval)
+                    try await Task.sleep(for: ProjectSyncScheduler.Policy.production.maintenanceInterval)
                 } catch {
                     return
                 }

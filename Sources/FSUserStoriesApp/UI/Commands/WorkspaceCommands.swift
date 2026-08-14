@@ -31,6 +31,12 @@ struct StoryCommands: Commands {
     let store: AppStore
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button(L10n.string("About FS User Stories")) {
+                AppReleaseInfo.presentAboutPanel()
+            }
+        }
+
         CommandGroup(replacing: .newItem) {
             Button(L10n.string("New Story")) {
                 actions?.createStory()
