@@ -4,11 +4,14 @@ import AppKit
 import SwiftUI
 
 struct WorkspaceCommandActions {
+    let hasSelectedProject: Bool
     let canCreateStory: Bool
     let hasSelectedStory: Bool
     let canEditSelectedStory: Bool
     let createProject: () -> Void
     let createStory: () -> Void
+    let importStories: () -> Void
+    let exportStories: () -> Void
     let editStory: () -> Void
     let duplicateStory: () -> Void
     let requestStoryDeletion: () -> Void
@@ -51,7 +54,25 @@ struct StoryCommands: Commands {
             .disabled(actions == nil)
         }
 
-        CommandMenu(L10n.string("Story")) {
+        CommandGroup(after: .newItem) {
+            Divider()
+
+            Button(L10n.string("Import Stories…")) {
+                actions?.importStories()
+            }
+            .keyboardShortcut("i", modifiers: [.command, .shift])
+            .disabled(actions?.hasSelectedProject != true)
+
+            Button(L10n.string("Export Stories…")) {
+                actions?.exportStories()
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(actions?.hasSelectedProject != true)
+        }
+
+        CommandGroup(after: .pasteboard) {
+            Divider()
+
             Button(L10n.string("Edit Story")) {
                 actions?.editStory()
             }

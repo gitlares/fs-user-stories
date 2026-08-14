@@ -7,6 +7,12 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
 
+        // Launch with --dark-mode-preview to verify semantic colors without
+        // changing the Mac's system appearance during visual QA.
+        if ProcessInfo.processInfo.arguments.contains("--dark-mode-preview") {
+            NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        }
+
         // Swift Package executable targets are launched by Xcode as plain Unix
         // executables instead of an application bundle, so AppKit cannot read
         // CFBundleIconFile from Support/Info.plist while developing. Keep the

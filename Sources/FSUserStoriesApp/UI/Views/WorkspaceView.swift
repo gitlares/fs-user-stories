@@ -2,6 +2,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum PresentedSheet: Identifiable {
     case newProject
@@ -11,6 +12,9 @@ private enum PresentedSheet: Identifiable {
     case editStory(projectID: UUID, storyID: UUID)
     case sharing(projectID: UUID)
     case joinSharedProject
+    case connectExistingRepository
+    case exportStories(projectID: UUID)
+    case importStories(projectID: UUID, document: StoryMarkdownDocument)
 
     var id: String {
         switch self {
@@ -28,6 +32,12 @@ private enum PresentedSheet: Identifiable {
             "sharing-\(projectID)"
         case .joinSharedProject:
             "join-shared-project"
+        case .connectExistingRepository:
+            "connect-existing-repository"
+        case let .exportStories(projectID):
+            "export-stories-\(projectID)"
+        case let .importStories(projectID, document):
+            "import-stories-\(projectID)-\(document.stories.count)"
         }
     }
 }
@@ -51,9 +61,11 @@ struct WorkspaceView: View {
         Group {
             if store.selectedProject == nil {
                 NavigationStack {
-                    WelcomeView {
-                        presentedSheet = .newProject
-                    }
+                    WelcomeView(
+                        createProject: { presentedSheet = .newProject },
+                        joinWithInvitation: { presentedSheet = .joinSharedProject },
+                        connectRepository: { presentedSheet = .connectExistingRepository }
+                    )
                     .navigationTitle(L10n.string("Projects"))
                 }
             } else {
@@ -71,6 +83,13 @@ struct WorkspaceView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if let project = store.selectedProject {
+                    if project.gitRepository?.remoteURL != nil {
+                        ProjectSyncIndicator(
+                            state: store.syncState(for: project.id),
+                            lastSyncedAt: project.gitRepository?.lastSyncedAt
+                        )
+                    }
+
                     Button {
                         presentedSheet = .sharing(projectID: project.id)
                     } label: {
@@ -153,7 +172,20 @@ struct WorkspaceView: View {
             case let .sharing(projectID):
                 GitSyncView(store: store, projectID: projectID)
             case .joinSharedProject:
-                GitJoinView(store: store)
+                GitJoinView(store: store, initialMode: .invitation)
+            case .connectExistingRepository:
+                GitJoinView(store: store, initialMode: .repository)
+            case let .exportStories(projectID):
+                if let project = store.projects.first(where: { $0.id == projectID }) {
+                    StoryExportView(
+                        project: project,
+                        initiallySelectedStoryID: store.selectedStoryID
+                    )
+                }
+            case let .importStories(projectID, document):
+                StoryImportReviewView(document: document) { stories in
+                    store.importStories(stories, to: projectID)
+                }
             }
         }
         .alert(
@@ -184,6 +216,8 @@ struct WorkspaceView: View {
         .onChange(of: store.selectedProjectID) {
             store.selectedProjectDidChange()
         }
+        .toolbarBackground(.ultraThinMaterial, for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
     }
 
     private var projectSidebar: some View {
@@ -288,9 +322,11 @@ struct WorkspaceView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else {
-            WelcomeView {
-                presentedSheet = .newProject
-            }
+            WelcomeView(
+                createProject: { presentedSheet = .newProject },
+                joinWithInvitation: { presentedSheet = .joinSharedProject },
+                connectRepository: { presentedSheet = .connectExistingRepository }
+            )
         }
     }
 
@@ -414,6 +450,7 @@ struct WorkspaceView: View {
 
     private var workspaceCommandActions: WorkspaceCommandActions {
         WorkspaceCommandActions(
+            hasSelectedProject: store.selectedProject != nil,
             canCreateStory: store.selectedProject?.actors.isEmpty == false,
             hasSelectedStory: store.selectedStory != nil,
             canEditSelectedStory: store.selectedStory?.status != .done && store.selectedStory != nil,
@@ -426,6 +463,13 @@ struct WorkspaceView: View {
                     !project.actors.isEmpty
                 else { return }
                 presentedSheet = .newStory(projectID: project.id)
+            },
+            importStories: {
+                chooseStoryImportFile()
+            },
+            exportStories: {
+                guard let projectID = store.selectedProjectID else { return }
+                presentedSheet = .exportStories(projectID: projectID)
             },
             editStory: {
                 guard
@@ -447,6 +491,24 @@ struct WorkspaceView: View {
         )
     }
 
+    private func chooseStoryImportFile() {
+        guard let projectID = store.selectedProjectID else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let markdown = try String(contentsOf: url, encoding: .utf8)
+            let document = try StoryMarkdownTransfer.parse(markdown)
+            presentedSheet = .importStories(projectID: projectID, document: document)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
+    }
+
     private var keyboardDeleteConfirmationIsPresented: Binding<Bool> {
         Binding(
             get: { storyPendingDeletion != nil },
@@ -456,6 +518,46 @@ struct WorkspaceView: View {
                 }
             }
         )
+    }
+}
+
+private struct ProjectSyncIndicator: View {
+    let state: ProjectSyncState
+    let lastSyncedAt: Date?
+
+    var body: some View {
+        Group {
+            switch state {
+            case .working:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L10n.string("Synchronizing…"))
+                }
+            case .failed:
+                Label(L10n.string("Sync failed"), systemImage: "exclamationmark.icloud.fill")
+                    .foregroundStyle(.red)
+            case .succeeded:
+                Label(L10n.string("Synchronized"), systemImage: "checkmark.icloud.fill")
+                    .foregroundStyle(.green)
+            case .idle:
+                if lastSyncedAt != nil {
+                    Label(L10n.string("Synchronized"), systemImage: "checkmark.icloud")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(L10n.string("Waiting to sync"), systemImage: "icloud")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .font(.caption.weight(.medium))
+        .help(helpText)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var helpText: String {
+        guard let lastSyncedAt else { return L10n.string("This project has not synchronized yet.") }
+        return "\(L10n.string("Last synchronized")): \(lastSyncedAt.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

@@ -14,7 +14,7 @@ struct ProjectActor: Identifiable, Hashable, Sendable {
     }
 }
 
-enum StoryStatus: String, CaseIterable, Identifiable, Sendable {
+enum StoryStatus: String, CaseIterable, Identifiable, Codable, Sendable {
     case draft
     case active
     case done
@@ -33,7 +33,7 @@ enum StoryStatus: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct AcceptanceCriterion: Identifiable, Hashable, Sendable {
+struct AcceptanceCriterion: Identifiable, Hashable, Codable, Sendable {
     let id: UUID
     var text: String
     var isMet: Bool

@@ -217,6 +217,10 @@ struct GitSyncService: Sendable {
         return isGitHubURL(remoteURL)
     }
 
+    func remoteUsesGitHub(_ remoteURL: String) -> Bool {
+        isGitHubURL(remoteURL.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     func join(invitation: String, accessToken: String? = nil) throws -> GitSynchronizationResult {
         let invitationResult = try core.execute([
             "command": "read_invitation",
@@ -250,6 +254,51 @@ struct GitSyncService: Sendable {
             "digest": NSNull()
         ]
         return try synchronizationResult(wrappedResult, link: link)
+    }
+
+    func join(remoteURL: String, accessToken: String? = nil) throws -> GitSynchronizationResult {
+        let normalizedRemoteURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let temporaryRepositoryURL = repositoriesRoot.appending(
+            path: "Import-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+
+        do {
+            var cloneCommand: [String: Any] = [
+                "command": "clone_shared",
+                "repository_path": temporaryRepositoryURL.path,
+                "remote_url": normalizedRemoteURL
+            ]
+            if isGitHubURL(normalizedRemoteURL), let accessToken {
+                cloneCommand["access_token"] = accessToken
+            }
+            let snapshotObject = try core.execute(cloneCommand)
+            let data = try JSONSerialization.data(withJSONObject: snapshotObject)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let snapshot = try decoder.decode(GitProjectSnapshot.self, from: data)
+            let finalRepositoryURL = repositoryURL(for: snapshot.projectID)
+
+            if FileManager.default.fileExists(atPath: finalRepositoryURL.path) {
+                throw RustCoreError.commandFailed(
+                    L10n.string("This shared project is already on this Mac.")
+                )
+            }
+            try FileManager.default.moveItem(at: temporaryRepositoryURL, to: finalRepositoryURL)
+
+            return GitSynchronizationResult(
+                link: GitRepositoryLink(
+                    localPath: finalRepositoryURL.path,
+                    remoteURL: normalizedRemoteURL,
+                    defaultBranch: "fs-user-stories",
+                    lastSyncedAt: .now
+                ),
+                snapshot: snapshot
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryRepositoryURL)
+            throw error
+        }
     }
 
     func resolveSynchronization(

@@ -21,6 +21,7 @@ final class AppStore {
     private(set) var persistenceError: String?
     private(set) var mcpServerState: MCPServerState = .stopped
     private(set) var projectSyncState: ProjectSyncState = .idle
+    private(set) var projectSyncStates: [UUID: ProjectSyncState] = [:]
     private(set) var pendingSyncConflicts: [CoreSyncConflict] = []
     var selectedProjectID: UUID?
     var selectedStoryID: UUID?
@@ -125,6 +126,15 @@ final class AppStore {
         return project.stories.first { $0.id == selectedStoryID }
     }
 
+    func syncState(for projectID: UUID) -> ProjectSyncState {
+        projectSyncStates[projectID] ?? .idle
+    }
+
+    private func setSyncState(_ state: ProjectSyncState, for projectID: UUID) {
+        projectSyncState = state
+        projectSyncStates[projectID] = state
+    }
+
     @discardableResult
     func createProject(name: String, prefix: String) -> Result<FSProject, WorkspaceError> {
         let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -169,7 +179,7 @@ final class AppStore {
                 attachmentURL(for: attachment).map { (attachment.id, $0) }
             }
         )
-        projectSyncState = .working
+        setSyncState(.working, for: projectID)
         do {
             let link = try await Task.detached {
                 var preparedProject = project
@@ -190,10 +200,10 @@ final class AppStore {
                     persistenceError ?? "The repository connection could not be saved"
                 )
             }
-            projectSyncState = .idle
+            setSyncState(.idle, for: projectID)
             return .success(())
         } catch {
-            projectSyncState = .failed(error.localizedDescription)
+            setSyncState(.failed(error.localizedDescription), for: projectID)
             return .failure(.persistenceFailure(error.localizedDescription))
         }
     }
@@ -210,7 +220,7 @@ final class AppStore {
                 attachmentURL(for: attachment).map { (attachment.id, $0) }
             }
         )
-        projectSyncState = .working
+        setSyncState(.working, for: projectID)
         do {
             let link = try await Task.detached {
                 try gitSyncService.initialize(project, attachmentURLs: attachmentURLs)
@@ -224,10 +234,10 @@ final class AppStore {
                     persistenceError ?? "The managed repository could not be saved"
                 )
             }
-            projectSyncState = .idle
+            setSyncState(.idle, for: projectID)
             return .success(())
         } catch {
-            projectSyncState = .failed(error.localizedDescription)
+            setSyncState(.failed(error.localizedDescription), for: projectID)
             return .failure(.persistenceFailure(error.localizedDescription))
         }
     }
@@ -251,7 +261,7 @@ final class AppStore {
             }
         )
         let accessToken = githubAccessToken()
-        projectSyncState = .working
+        setSyncState(.working, for: projectID)
         do {
             let synchronization = try await Task.detached {
                 try gitSyncService.resolveSynchronization(
@@ -275,10 +285,10 @@ final class AppStore {
             }
             pendingSyncConflicts = []
             blockedSyncProjectIDs.remove(projectID)
-            projectSyncState = .succeeded(synchronization.link.lastSyncedAt ?? .now)
+            setSyncState(.succeeded(synchronization.link.lastSyncedAt ?? .now), for: projectID)
             return .success(())
         } catch {
-            projectSyncState = .failed(error.localizedDescription)
+            setSyncState(.failed(error.localizedDescription), for: projectID)
             return .failure(.persistenceFailure(error.localizedDescription))
         }
     }
@@ -301,7 +311,7 @@ final class AppStore {
         )
         let accessToken = githubAccessToken()
         let localChangeVersion = localChangeVersions[projectID, default: 0]
-        projectSyncState = .working
+        setSyncState(.working, for: projectID)
         do {
             let synchronization = try await Task.detached {
                 try gitSyncService.synchronize(
@@ -329,15 +339,15 @@ final class AppStore {
                     persistenceError ?? "The synchronization state could not be saved"
                 )
             }
-            projectSyncState = .succeeded(synchronization.link.lastSyncedAt ?? .now)
+            setSyncState(.succeeded(synchronization.link.lastSyncedAt ?? .now), for: projectID)
             return .success(())
         } catch let RustCoreError.syncConflicts(conflicts) {
             pendingSyncConflicts = conflicts
             blockedSyncProjectIDs.insert(projectID)
-            projectSyncState = .failed(L10n.string("Some shared changes need your decision."))
+            setSyncState(.failed(L10n.string("Some shared changes need your decision.")), for: projectID)
             return .failure(.persistenceFailure(L10n.string("Some shared changes need your decision.")))
         } catch {
-            projectSyncState = .failed(error.localizedDescription)
+            setSyncState(.failed(error.localizedDescription), for: projectID)
             return .failure(.persistenceFailure(error.localizedDescription))
         }
     }
@@ -424,7 +434,7 @@ final class AppStore {
         guard let gitSyncService else {
             return .failure(.persistenceFailure("The synchronization core is unavailable"))
         }
-        projectSyncState = .working
+        setSyncState(.working, for: projectID)
         do {
             let project = projects[projectIndex]
             let attachmentURLs = Dictionary(
@@ -467,10 +477,10 @@ final class AppStore {
                     persistenceError ?? "The GitHub repository could not be saved"
                 )
             }
-            projectSyncState = .succeeded(.now)
+            setSyncState(.succeeded(.now), for: projectID)
             return .success(repository)
         } catch {
-            projectSyncState = .failed(error.localizedDescription)
+            setSyncState(.failed(error.localizedDescription), for: projectID)
             return .failure(.persistenceFailure(error.localizedDescription))
         }
     }
@@ -548,13 +558,51 @@ final class AppStore {
             )
             projects.append(project)
             selectedProjectID = project.id
-            selectedStoryID = project.stories.first?.id
+            selectedStoryID = project.stories.sorted { $0.createdAt > $1.createdAt }.first?.id
             guard persist() else {
                 throw WorkspaceError.persistenceFailure(
                     persistenceError ?? "The shared project could not be saved"
                 )
             }
             projectSyncState = .succeeded(.now)
+            projectSyncStates[project.id] = .succeeded(.now)
+            return .success(project)
+        } catch {
+            projectSyncState = .failed(error.localizedDescription)
+            return .failure(.persistenceFailure(error.localizedDescription))
+        }
+    }
+
+    func sharedRepositoryUsesGitHub(_ remoteURL: String) -> Bool {
+        gitSyncService?.remoteUsesGitHub(remoteURL) == true
+    }
+
+    func joinSharedRepository(remoteURL: String) async -> Result<FSProject, WorkspaceError> {
+        guard let gitSyncService else {
+            return .failure(.persistenceFailure("The synchronization core is unavailable"))
+        }
+        let accessToken = githubAccessToken()
+        projectSyncState = .working
+        do {
+            let synchronization = try await Task.detached {
+                try gitSyncService.join(remoteURL: remoteURL, accessToken: accessToken)
+            }.value
+            guard !projects.contains(where: { $0.id == synchronization.snapshot.projectID }) else {
+                throw WorkspaceError.persistenceFailure(L10n.string("This shared project is already on this Mac."))
+            }
+            let project = try projectFromSynchronizedSnapshot(
+                synchronization.snapshot,
+                link: synchronization.link
+            )
+            projects.append(project)
+            selectedProjectID = project.id
+            selectedStoryID = project.stories.sorted { $0.createdAt > $1.createdAt }.first?.id
+            guard persist() else {
+                throw WorkspaceError.persistenceFailure(
+                    persistenceError ?? "The shared project could not be saved"
+                )
+            }
+            setSyncState(.succeeded(.now), for: project.id)
             return .success(project)
         } catch {
             projectSyncState = .failed(error.localizedDescription)
@@ -807,6 +855,65 @@ final class AppStore {
             return .failure(.persistenceFailure(persistenceError ?? "The story could not be saved"))
         }
         return .success(story)
+    }
+
+    @discardableResult
+    func importStories(
+        _ importedStories: [PortableStory],
+        to projectID: UUID
+    ) -> Result<Int, WorkspaceError> {
+        guard !importedStories.isEmpty else { return .success(0) }
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+            return .failure(.projectNotFound)
+        }
+
+        let originalProject = projects[projectIndex]
+        var nextNumber = (originalProject.stories.map(\.number).max() ?? 0) + 1
+        var importedStoryIDs: [UUID] = []
+
+        for portableStory in importedStories {
+            let profileName = portableStory.profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let actorID: UUID
+            if let existingActor = projects[projectIndex].actors.first(where: {
+                $0.name.compare(profileName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            }) {
+                actorID = existingActor.id
+            } else {
+                let actor = ProjectActor(
+                    name: profileName.isEmpty ? L10n.string("Imported Profile") : profileName,
+                    role: portableStory.profileDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                projects[projectIndex].actors.append(actor)
+                actorID = actor.id
+            }
+
+            let story = UserStory(
+                number: nextNumber,
+                title: portableStory.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                actorID: actorID,
+                want: portableStory.want.trimmingCharacters(in: .whitespacesAndNewlines),
+                outcome: portableStory.outcome.trimmingCharacters(in: .whitespacesAndNewlines),
+                notes: portableStory.notes,
+                acceptanceCriteria: portableStory.acceptanceCriteria.map {
+                    AcceptanceCriterion(text: $0.text, isMet: $0.isMet)
+                },
+                attachments: [],
+                status: portableStory.status,
+                createdAt: portableStory.createdAt
+            )
+            projects[projectIndex].stories.append(story)
+            importedStoryIDs.append(story.id)
+            nextNumber += 1
+        }
+
+        guard persist(changedProjectID: projectID) else {
+            projects[projectIndex] = originalProject
+            return .failure(.persistenceFailure(
+                persistenceError ?? L10n.string("The stories could not be imported.")
+            ))
+        }
+        selectedStoryID = importedStoryIDs.last
+        return .success(importedStories.count)
     }
 
     @discardableResult

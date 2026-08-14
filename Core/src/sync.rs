@@ -37,8 +37,9 @@ pub fn merge_snapshots(
 
     let (actors, mut conflicts) =
         merge_entities("profile", &base.actors, &local.actors, &shared.actors)?;
-    let (stories, story_conflicts) =
+    let (mut stories, story_conflicts) =
         merge_entities("story", &base.stories, &local.stories, &shared.stories)?;
+    normalize_story_numbers(&mut stories)?;
     conflicts.extend(story_conflicts);
 
     let header_local_changed = project_header(local) != project_header(base);
@@ -106,6 +107,7 @@ pub fn apply_resolutions(
             _ => return Err(CoreError::InvalidArchive("Unknown conflict type".into())),
         }
     }
+    normalize_story_numbers(&mut result.merged.stories)?;
     result.merged.validate()?;
     Ok(result.merged)
 }
@@ -178,6 +180,57 @@ fn entity_map(values: &[Value]) -> Result<BTreeMap<String, &Value>, CoreError> {
             Ok((id, value))
         })
         .collect()
+}
+
+fn normalize_story_numbers(stories: &mut [Value]) -> Result<(), CoreError> {
+    let mut numbered_stories = stories
+        .iter()
+        .enumerate()
+        .filter_map(|(index, story)| {
+            let number = story.get("number")?.as_u64()?;
+            let id = story.get("id")?.as_str()?.to_owned();
+            let created_at = story
+                .get("createdAt")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            Some((index, number, created_at, id))
+        })
+        .collect::<Vec<_>>();
+
+    numbered_stories
+        .sort_by(|left, right| (left.1, &left.2, &left.3).cmp(&(right.1, &right.2, &right.3)));
+    let mut used = BTreeSet::new();
+    let mut duplicates = Vec::new();
+    for (index, number, _, _) in &numbered_stories {
+        if !used.insert(*number) {
+            duplicates.push(*index);
+        }
+    }
+
+    let mut next_number = numbered_stories
+        .iter()
+        .map(|(_, number, _, _)| *number)
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| CoreError::InvalidArchive("Story number limit reached".into()))?;
+    for index in duplicates {
+        while used.contains(&next_number) {
+            next_number = next_number
+                .checked_add(1)
+                .ok_or_else(|| CoreError::InvalidArchive("Story number limit reached".into()))?;
+        }
+        let story = stories[index]
+            .as_object_mut()
+            .ok_or_else(|| CoreError::InvalidArchive("Story must be an object".into()))?;
+        story.insert("number".into(), Value::from(next_number));
+        used.insert(next_number);
+        next_number = next_number
+            .checked_add(1)
+            .ok_or_else(|| CoreError::InvalidArchive("Story number limit reached".into()))?;
+    }
+    Ok(())
 }
 
 fn project_header(snapshot: &ProjectSnapshot) -> Value {
@@ -260,5 +313,55 @@ mod tests {
         )
         .unwrap();
         assert_eq!(merged.stories[0]["title"], "Shared");
+    }
+
+    #[test]
+    fn concurrent_stories_keep_distinct_uuids_and_receive_unique_numbers() {
+        let base = snapshot(
+            vec![],
+            vec![json!({
+                "id":"00000000-0000-0000-0000-000000000001",
+                "number":1,
+                "createdAt":"2026-08-13T10:00:00Z",
+                "title":"Existing"
+            })],
+        );
+        let mut local_stories = base.stories.clone();
+        local_stories.push(json!({
+            "id":"00000000-0000-0000-0000-000000000002",
+            "number":2,
+            "createdAt":"2026-08-13T11:00:00Z",
+            "title":"Created on Mac A"
+        }));
+        let mut shared_stories = base.stories.clone();
+        shared_stories.push(json!({
+            "id":"00000000-0000-0000-0000-000000000003",
+            "number":2,
+            "createdAt":"2026-08-13T11:00:01Z",
+            "title":"Created on Mac B"
+        }));
+
+        let result = merge_snapshots(
+            &base,
+            &snapshot(vec![], local_stories),
+            &snapshot(vec![], shared_stories),
+        )
+        .unwrap();
+
+        assert!(result.conflicts.is_empty());
+        let ids = result
+            .merged
+            .stories
+            .iter()
+            .map(|story| story["id"].as_str().unwrap())
+            .collect::<BTreeSet<_>>();
+        let numbers = result
+            .merged
+            .stories
+            .iter()
+            .map(|story| story["number"].as_u64().unwrap())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(ids.len(), 3);
+        assert_eq!(numbers, BTreeSet::from([1, 2, 3]));
     }
 }

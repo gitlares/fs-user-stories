@@ -12,6 +12,7 @@ struct ProjectStoriesView: View {
     @State private var draftStoriesAreExpanded = false
     @State private var completedStoriesAreExpanded = false
     @State private var storyPendingDeletion: UserStory?
+    @AppStorage("storySortOrder") private var sortOrderRawValue = StorySortOrder.newest.rawValue
     @FocusState private var storiesListIsFocused: Bool
     let addActor: () -> Void
     let addStory: () -> Void
@@ -80,10 +81,6 @@ struct ProjectStoriesView: View {
                 }
             }
         }
-        .searchable(
-            text: $searchText,
-            prompt: Text(L10n.string("Search stories"))
-        )
         .onChange(of: searchText) {
             let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             activeStoriesAreExpanded = true
@@ -144,7 +141,7 @@ struct ProjectStoriesView: View {
             ].joined(separator: " ")
 
             return searchableText.localizedStandardContains(query)
-        }
+        }.sorted(by: sortOrder.areInIncreasingOrder)
     }
 
     private func stories(with status: StoryStatus) -> [UserStory] {
@@ -245,7 +242,7 @@ struct ProjectStoriesView: View {
     }
 
     private var selectionColor: Color {
-        Color(nsColor: .selectedContentBackgroundColor).opacity(0.14)
+        Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
     }
 
     private var visibleStories: [UserStory] {
@@ -288,8 +285,12 @@ struct ProjectStoriesView: View {
                     .contentTransition(.numericText())
             }
 
-            if !project.actors.isEmpty {
-                HStack(spacing: 10) {
+            TextField(L10n.string("Search stories"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.large)
+
+            HStack(spacing: 10) {
+                if !project.actors.isEmpty {
                     Label(L10n.string("Profile"), systemImage: "line.3.horizontal.decrease")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
@@ -309,10 +310,64 @@ struct ProjectStoriesView: View {
                     .pickerStyle(.menu)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                Spacer()
+
+                Picker(L10n.string("Sort Stories"), selection: sortOrderBinding) {
+                    ForEach(StorySortOrder.allCases) { order in
+                        Text(order.localizedName).tag(order)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+                .help(L10n.string("Sort Stories"))
+                .accessibilityLabel(L10n.string("Sort Stories"))
             }
         }
         .padding(20)
-        .background(.background)
+    }
+
+    private var sortOrder: StorySortOrder {
+        StorySortOrder(rawValue: sortOrderRawValue) ?? .newest
+    }
+
+    private var sortOrderBinding: Binding<StorySortOrder> {
+        Binding(
+            get: { sortOrder },
+            set: { sortOrderRawValue = $0.rawValue }
+        )
+    }
+}
+
+private enum StorySortOrder: String, CaseIterable, Identifiable {
+    case newest
+    case oldest
+    case title
+
+    var id: Self { self }
+
+    var localizedName: String {
+        switch self {
+        case .newest: L10n.string("Newest First")
+        case .oldest: L10n.string("Oldest First")
+        case .title: L10n.string("Title A–Z")
+        }
+    }
+
+    func areInIncreasingOrder(_ lhs: UserStory, _ rhs: UserStory) -> Bool {
+        switch self {
+        case .newest:
+            lhs.createdAt == rhs.createdAt ? lhs.number > rhs.number : lhs.createdAt > rhs.createdAt
+        case .oldest:
+            lhs.createdAt == rhs.createdAt ? lhs.number < rhs.number : lhs.createdAt < rhs.createdAt
+        case .title:
+            switch lhs.title.localizedStandardCompare(rhs.title) {
+            case .orderedAscending: true
+            case .orderedDescending: false
+            case .orderedSame: lhs.number < rhs.number
+            }
+        }
     }
 }
 

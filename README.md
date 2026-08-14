@@ -65,7 +65,9 @@ following capabilities.
   main window is closed, with a separate command to quit completely.
 - Native confirmation dialogs for destructive operations.
 - Search, collapsible Draft, Active, and Completed sections, status filtering,
-  and profile filtering.
+  profile filtering, and newest/oldest/title ordering.
+- A first-run choice to create a project, use an invitation, or connect an
+  existing shared repository.
 
 ### Projects, profiles, and stories
 
@@ -80,6 +82,9 @@ following capabilities.
 - A direct **Mark as Completed** action once every criterion is satisfied.
 - One intentionally simple notes field per story—no comment threads or activity
   feed.
+- Export all, Active, Completed, Draft, or manually selected stories into one
+  readable Markdown file; review and import selected stories from the same open
+  format. Attachments are intentionally excluded from this transfer in Alpha 5.
 
 ### Managed attachments
 
@@ -149,6 +154,12 @@ share, join, and synchronize—rather than with commits or branches.
   credentials.
 - Changes to separate stories or profiles merge automatically. Concurrent changes
   to the same item ask the user to choose **Keep Mine** or **Use Shared**.
+- Every story has an immutable UUID identity. Human references such as `NUB-4`
+  remain readable labels; if two Macs create the same number concurrently, both
+  stories survive and the duplicate references are renumbered deterministically.
+- Shared projects synchronize in the background with a visible per-project
+  status. The active project refreshes more often, local edits use bounded
+  debounce, and inactive projects are checked less frequently.
 - The app never places the SQLite database in Git.
 
 FS User Stories reserves the isolated `fs-user-stories` branch in every remote.
@@ -199,7 +210,8 @@ Linux and Windows are Version 1 targets, not alpha features.
 5. On the second Mac, choose **Join Shared Project** and paste the invitation.
 6. Authorize GitHub when the app opens Device Flow. No token is included in the
    invitation.
-7. Make a change on either Mac and choose **Synchronize Now** on both Macs.
+7. Make a change on either Mac and watch the synchronization indicator. Use
+   **Synchronize Now** only when an immediate manual refresh is useful.
 
 ## Portable project format
 

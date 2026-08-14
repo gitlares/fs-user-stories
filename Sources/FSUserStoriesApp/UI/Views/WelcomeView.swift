@@ -4,6 +4,8 @@ import SwiftUI
 
 struct WelcomeView: View {
     let createProject: () -> Void
+    let joinWithInvitation: () -> Void
+    let connectRepository: () -> Void
 
     var body: some View {
         ZStack {
@@ -31,12 +33,30 @@ struct WelcomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Button(action: createProject) {
-                    Label(L10n.string("Create Project"), systemImage: "plus")
-                }
+                VStack(spacing: 10) {
+                    Button(action: createProject) {
+                        Label(L10n.string("Create Project"), systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.glassProminent)
                     .controlSize(.large)
                     .keyboardShortcut("n", modifiers: .command)
+
+                    Button(action: joinWithInvitation) {
+                        Label(L10n.string("Use an Invitation"), systemImage: "person.2.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+
+                    Button(action: connectRepository) {
+                        Label(L10n.string("Connect Existing Repository"), systemImage: "externaldrive.connected.to.line.below")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                }
+                .frame(maxWidth: 300)
             }
             .frame(maxWidth: 420)
             .multilineTextAlignment(.center)

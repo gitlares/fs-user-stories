@@ -3,12 +3,26 @@
 import AppKit
 import SwiftUI
 
+enum GitJoinMode: String, CaseIterable, Identifiable {
+    case invitation
+    case repository
+
+    var id: Self { self }
+}
+
 struct GitJoinView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var store: AppStore
     @State private var invitation = ""
+    @State private var repositoryURL = ""
+    @State private var mode: GitJoinMode
     @State private var errorMessage: String?
     @State private var githubAuthorization: GitHubDeviceAuthorization?
+
+    init(store: AppStore, initialMode: GitJoinMode = .invitation) {
+        self.store = store
+        _mode = State(initialValue: initialMode)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,23 +32,37 @@ struct GitJoinView: View {
                         .font(.system(size: 40))
                         .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.string("Join Shared Project"))
+                        Text(L10n.string("Open Shared Project"))
                             .font(.title.bold())
-                        Text(L10n.string("Paste the invitation sent by a collaborator."))
+                        Text(modeDescription)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                TextEditor(text: $invitation)
-                    .font(.body.monospaced())
-                    .scrollContentBackground(.hidden)
-                    .padding(10)
-                    .frame(minHeight: 150)
-                    .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(.separator)
-                    }
+                Picker(L10n.string("Connection Method"), selection: $mode) {
+                    Text(L10n.string("Invitation")).tag(GitJoinMode.invitation)
+                    Text(L10n.string("Repository URL")).tag(GitJoinMode.repository)
+                }
+                .pickerStyle(.segmented)
+
+                if mode == .invitation {
+                    TextEditor(text: $invitation)
+                        .font(.body.monospaced())
+                        .scrollContentBackground(.hidden)
+                        .padding(10)
+                        .frame(minHeight: 150)
+                        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(.separator)
+                        }
+                } else {
+                    TextField(L10n.string("SSH or HTTPS repository URL"), text: $repositoryURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospaced())
+                        .controlSize(.large)
+                        .frame(minHeight: 54)
+                }
 
                 if let authorization = githubAuthorization {
                     HStack(spacing: 14) {
@@ -56,10 +84,7 @@ struct GitJoinView: View {
                     .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 }
 
-                Label(
-                    L10n.string("Invitations contain a repository address, not passwords or access tokens."),
-                    systemImage: "lock.shield"
-                )
+                Label(securityMessage, systemImage: "lock.shield")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -76,11 +101,11 @@ struct GitJoinView: View {
                 Button(L10n.string("Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(L10n.string("Join Project")) { join() }
+                Button(L10n.string("Open Project")) { join() }
                     .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(
-                        invitation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || githubAuthorization != nil
                             || store.projectSyncState == .working
                     )
@@ -94,12 +119,19 @@ struct GitJoinView: View {
     private func join() {
         errorMessage = nil
         Task {
-            switch store.sharedInvitationUsesGitHub(invitation) {
-            case let .failure(error):
-                errorMessage = error.localizedDescription
-                return
-            case let .success(usesGitHub):
-                if usesGitHub && !store.gitHubIsAuthorized {
+            switch mode {
+            case .invitation:
+                switch store.sharedInvitationUsesGitHub(invitation) {
+                case let .failure(error):
+                    errorMessage = error.localizedDescription
+                    return
+                case let .success(usesGitHub):
+                    if usesGitHub && !store.gitHubIsAuthorized {
+                        guard await authorizeGitHub() else { return }
+                    }
+                }
+            case .repository:
+                if store.sharedRepositoryUsesGitHub(repositoryURL) && !store.gitHubIsAuthorized {
                     guard await authorizeGitHub() else { return }
                 }
             }
@@ -130,11 +162,33 @@ struct GitJoinView: View {
     }
 
     private func finishJoining() async {
-        switch await store.joinSharedProject(invitation: invitation) {
-            case .success:
-                dismiss()
-            case let .failure(error):
-                errorMessage = error.localizedDescription
+        let result = switch mode {
+        case .invitation:
+            await store.joinSharedProject(invitation: invitation)
+        case .repository:
+            await store.joinSharedRepository(remoteURL: repositoryURL)
         }
+        switch result {
+        case .success:
+            dismiss()
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private var inputText: String {
+        mode == .invitation ? invitation : repositoryURL
+    }
+
+    private var modeDescription: String {
+        mode == .invitation
+            ? L10n.string("Paste the invitation sent by a collaborator.")
+            : L10n.string("Connect a repository that already contains an FS User Stories project.")
+    }
+
+    private var securityMessage: String {
+        mode == .invitation
+            ? L10n.string("Invitations contain a repository address, not passwords or access tokens.")
+            : L10n.string("Credentials stay in GitHub authorization or your local SSH configuration.")
     }
 }
