@@ -25,16 +25,17 @@ one notes field, and attachments.
 
 ## Why this exists
 
-FS User Stories began with a practical need: a couple maintaining several
-projects together. One person writes code; the other understands the product,
-what should be built, and why. They often only need a clear, shared place to
-write down a feature so it can be implemented.
+FS User Stories began with a practical need shared by people working alone,
+small teams, and larger teams: sometimes you only need a clear place to write
+down a feature—what should be built and why—so it can be implemented. That is
+true whether one person writes the code, a product partner defines the work, or
+a whole team needs a fast common reference.
 
-Tools such as Jira, Asana, and Trello can be excellent for larger teams, but for
-this workflow they add accounts, setup, process, cost, and more surface area
-than the work requires. The same friction appears with many hosted MCP
-integrations: access can be paid or limited, the round trip can be slow, and
-large tool responses consume unnecessary agent context.
+Tools such as Jira, Asana, and Trello can be excellent when their process is
+needed, but for this workflow they can add accounts, setup, ceremony, cost, and
+more surface area than the work requires. The same friction appears with many
+hosted MCP integrations: access can be paid or limited, the round trip can be
+slow, and large tool responses consume unnecessary agent context.
 
 This app reduces that friction. The stories stay on the computer, collaboration
 is optional through a repository the team already controls, and the local MCP
