@@ -11,6 +11,8 @@ import Foundation
 final class ProjectSyncScheduler {
     enum Policy {
         static let localChangeDebounce: Duration = .seconds(8)
+        static let maximumLocalChangeDelay: TimeInterval = 45
+        static let activeProjectActivationDebounce: Duration = .seconds(1)
         static let activeProjectRefresh: TimeInterval = 2 * 60
         static let inactiveProjectRefresh: TimeInterval = 30 * 60
         static let maintenanceInterval: Duration = .seconds(60)
@@ -36,13 +38,23 @@ final class ProjectSyncScheduler {
     private var worker: Task<Void, Never>?
     private var inactiveCursor = 0
     private var failureCounts: [UUID: Int] = [:]
+    private var firstLocalChangeAt: [UUID: Date] = [:]
+    private var activeProjectTask: Task<Void, Never>?
 
     init(synchronizationOperation: @escaping SynchronizationOperation) {
         self.synchronizationOperation = synchronizationOperation
     }
 
     func recordLocalChange(for projectID: UUID) {
-        schedule(projectID, after: Policy.localChangeDebounce, replacingExistingDelay: true)
+        let now = Date.now
+        let firstChange = firstLocalChangeAt[projectID] ?? now
+        firstLocalChangeAt[projectID] = firstChange
+
+        // Keep batching rapid edits, but never postpone a publish forever for a
+        // continuously edited project.
+        let remaining = max(0, Policy.maximumLocalChangeDelay - now.timeIntervalSince(firstChange))
+        let debounce = min(Policy.localChangeDebounce, .milliseconds(Int64(remaining * 1_000)))
+        schedule(projectID, after: debounce, replacingExistingDelay: true)
     }
 
     func requestImmediateSync(for projectID: UUID) {
@@ -54,7 +66,17 @@ final class ProjectSyncScheduler {
         guard isDue(project.gitRepository?.lastSyncedAt, interval: Policy.activeProjectRefresh, now: now) else {
             return
         }
-        schedule(project.id, after: .zero, replacingExistingDelay: false)
+        activeProjectTask?.cancel()
+        activeProjectTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: Policy.activeProjectActivationDebounce)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            activeProjectTask = nil
+            schedule(project.id, after: .zero, replacingExistingDelay: false)
+        }
     }
 
     /// Schedules the active project first and at most one inactive project per
@@ -108,6 +130,7 @@ final class ProjectSyncScheduler {
             }
             guard !Task.isCancelled, let self else { return }
             delayedTasks[projectID] = nil
+            firstLocalChangeAt[projectID] = nil
             enqueue(projectID)
         }
     }

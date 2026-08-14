@@ -1215,6 +1215,8 @@ final class AppStore {
         guard let persistenceStore else { return true }
 
         do {
+            // SQLite is the source of truth. A remote sync is only scheduled
+            // after this write succeeds and can never hold up local editing.
             try persistenceStore.save(projects)
             persistenceError = nil
             if
