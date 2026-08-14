@@ -26,7 +26,7 @@ extension AppStore {
                     ]),
                     "serverInfo": .object([
                         "name": .string("FS User Stories"),
-                        "version": .string("0.1.0")
+                        "version": .string("0.1.0-alpha.3")
                     ]),
                     "instructions": .string(
                         "FS User Stories is a local-first macOS application for organizing projects, actors, user stories, acceptance criteria, notes, and attachments. Use its tools to inspect work, find open stories, and keep requirements current. Completed stories are read-only until reopened. Destructive tools require confirm=true."
@@ -232,7 +232,7 @@ extension AppStore {
     private func aboutApp() -> JSONValue {
         .object([
             "name": .string("FS User Stories"),
-            "version": .string("0.1.0-alpha"),
+            "version": .string("0.1.0-alpha.3"),
             "description": .string(
                 "A local-first macOS workspace for projects, actors, user stories, acceptance criteria, notes, and attachments. The MCP server exposes the same local SQLite-backed domain while the app is running."
             ),
