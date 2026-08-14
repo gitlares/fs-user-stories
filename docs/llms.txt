@@ -7,7 +7,7 @@ FS User Stories is an open-source, local-first macOS application for writing and
 - Homepage: https://gitlares.github.io/fs-user-stories/
 - Source: https://github.com/gitlares/fs-user-stories
 - Releases: https://github.com/gitlares/fs-user-stories/releases
-- License: https://github.com/gitlares/fs-user-stories/blob/docs/mit-license/LICENSE
+- License: https://github.com/gitlares/fs-user-stories/blob/main/LICENSE
 
 ## Product facts
 
