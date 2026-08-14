@@ -265,6 +265,59 @@ struct GitSyncView: View {
                 if isGitHubURL(remoteURL) {
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
+                        Text(L10n.string("GitHub access"))
+                            .font(.headline)
+                        Text(L10n.string("Authorize this Mac again if you moved from a development build or GitHub access expired."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let authorization = githubAuthorization {
+                            HStack(spacing: 14) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(L10n.string("Enter this code on GitHub"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(authorization.userCode)
+                                        .font(.title2.monospaced().bold())
+                                        .textSelection(.enabled)
+                                }
+                                Spacer()
+                                ProgressView()
+                                Text(L10n.string("Waiting for GitHub authorization…"))
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(14)
+                            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        HStack {
+                            Label(
+                                store.gitHubIsAuthorized
+                                    ? L10n.string("GitHub is authorized on this Mac.")
+                                    : L10n.string("GitHub authorization is required to synchronize this private repository."),
+                                systemImage: store.gitHubIsAuthorized ? "checkmark.circle.fill" : "lock.shield"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(store.gitHubIsAuthorized ? .green : .secondary)
+                            Spacer()
+                            Button {
+                                reauthorizeGitHub(project)
+                            } label: {
+                                Label(
+                                    githubAuthorization == nil
+                                        ? L10n.string("Reauthorize GitHub")
+                                        : L10n.string("Authorizing…"),
+                                    systemImage: "arrow.clockwise.icloud"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(
+                                !store.gitHubRepositoryCreationIsConfigured
+                                    || githubAuthorization != nil
+                                    || isWorking
+                            )
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
                         Text(L10n.string("Invite a GitHub collaborator"))
                             .font(.headline)
                         Text(L10n.string("They must accept GitHub's invitation before joining this private project."))
@@ -363,7 +416,7 @@ struct GitSyncView: View {
                         )
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(isWorking)
+                    .disabled(isWorking || githubAuthorization != nil)
                 }
                 if invitation != nil {
                     Label(L10n.string("Invitation copied. It contains the repository address, never credentials."), systemImage: "checkmark.circle.fill")
@@ -433,6 +486,29 @@ struct GitSyncView: View {
         Task {
             if case let .failure(error) = await store.synchronizeProject(project.id) {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func reauthorizeGitHub(_ project: FSProject) {
+        errorMessage = nil
+        Task {
+            switch await store.beginGitHubRepositoryCreation() {
+            case let .failure(error):
+                errorMessage = error.localizedDescription
+            case let .success(authorization):
+                githubAuthorization = authorization
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(authorization.userCode, forType: .string)
+                NSWorkspace.shared.open(authorization.verificationURL)
+                switch await store.finishGitHubAuthorization(authorization) {
+                case .success:
+                    githubAuthorization = nil
+                    synchronize(project)
+                case let .failure(error):
+                    githubAuthorization = nil
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }

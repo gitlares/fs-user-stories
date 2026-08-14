@@ -215,6 +215,12 @@
 "Copy Invitation" = "Copiar invitación";
 "Synchronizing…" = "Sincronizando…";
 "Synchronize Now" = "Sincronizar ahora";
+"GitHub access" = "Acceso a GitHub";
+"Authorize this Mac again if you moved from a development build or GitHub access expired." = "Vuelve a autorizar esta Mac si cambiaste desde una versión de desarrollo o el acceso a GitHub venció.";
+"Waiting for GitHub authorization…" = "Esperando la autorización de GitHub…";
+"GitHub is authorized on this Mac." = "GitHub está autorizado en esta Mac.";
+"GitHub authorization is required to synchronize this private repository." = "Se requiere autorización de GitHub para sincronizar este repositorio privado.";
+"Reauthorize GitHub" = "Volver a autorizar GitHub";
 "Invitation copied. It contains the repository address, never credentials." = "Invitación copiada. Contiene la dirección del repositorio, nunca credenciales.";
 "Shared" = "Compartido";
 "Some shared changes need your decision." = "Algunos cambios compartidos necesitan tu decisión.";
