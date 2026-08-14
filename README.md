@@ -152,6 +152,25 @@ Homebrew, or libgit2 installed.
 This is an alpha intended for team testing. Back up important project data and
 [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
 
+## Road to Version 1
+
+**Alpha 1 is an early macOS release for real-world testing with small teams.**
+It is the place to validate the local-first workflow, Git sharing, and local MCP
+before the first stable release.
+
+**Version 1 is planned as the public product release:**
+
+- A polished macOS edition distributed through the Mac App Store.
+- Native Linux and Windows editions built on the same open portable core and
+  local project format.
+- Continued support for the signed direct macOS download for people who prefer
+  an independent, open-source distribution.
+
+The product promise does not change across platforms: local data, no FS User
+Stories accounts, no mandatory cloud, optional Git sharing, and a local MCP
+server for the agent the user chooses. The current alpha supports macOS only;
+Linux and Windows are Version 1 targets, not alpha features.
+
 ### Test with two Macs
 
 1. On the first Mac, open **Share & Sync** and choose **Create on GitHub**.
