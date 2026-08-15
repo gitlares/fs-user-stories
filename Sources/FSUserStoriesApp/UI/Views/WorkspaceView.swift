@@ -84,22 +84,45 @@ struct WorkspaceView: View {
         .navigationTitle(store.selectedProject?.name ?? "Projects")
         .focusedSceneValue(\.workspaceCommandActions, workspaceCommandActions)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 if let project = store.selectedProject {
-                    if project.gitRepository?.remoteURL != nil {
-                        ProjectSyncIndicator(
-                            state: store.syncState(for: project.id),
-                            lastSyncedAt: project.gitRepository?.lastSyncedAt
-                        )
-                    }
-
                     Button {
                         presentedSheet = .sharing(projectID: project.id)
                     } label: {
-                        Label(L10n.string("Share & Sync"), systemImage: "arrow.triangle.2.circlepath")
+                        ProjectSyncToolbarLabel(
+                            state: store.syncState(for: project.id),
+                            isShared: project.gitRepository?.remoteURL != nil
+                        )
                     }
-                    .help(L10n.string("Share & Sync"))
+                    .help(syncHelpText(for: project))
+                }
+            }
 
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let project = store.selectedProject {
+                    Button {
+                        presentedSheet = .newActor(projectID: project.id)
+                    } label: {
+                        Label(L10n.string("Add Profile"), systemImage: "person.badge.plus")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help(L10n.string("Add Profile"))
+
+                    Button {
+                        presentedSheet = .newStory(projectID: project.id)
+                    } label: {
+                        Label(L10n.string("Add Story"), systemImage: "square.and.pencil")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help(project.actors.isEmpty ? L10n.string("Add an actor first") : L10n.string("Add Story"))
+                    .disabled(project.actors.isEmpty)
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                if let project = store.selectedProject {
                     Menu {
                         Button {
                             presentedSheet = .editProject(projectID: project.id)
@@ -108,23 +131,9 @@ struct WorkspaceView: View {
                         }
                     } label: {
                         Label(L10n.string("Project Options"), systemImage: "ellipsis.circle")
+                            .labelStyle(.iconOnly)
                     }
                     .help(L10n.string("Project Options"))
-
-                    Button {
-                        presentedSheet = .newActor(projectID: project.id)
-                    } label: {
-                        Label(L10n.string("Add Profile"), systemImage: "person.badge.plus")
-                    }
-                    .help(L10n.string("Add Profile"))
-
-                    Button {
-                        presentedSheet = .newStory(projectID: project.id)
-                    } label: {
-                        Label(L10n.string("Add Story"), systemImage: "square.and.pencil")
-                    }
-                    .help(project.actors.isEmpty ? L10n.string("Add an actor first") : L10n.string("Add Story"))
-                    .disabled(project.actors.isEmpty)
                 }
             }
         }
@@ -482,6 +491,21 @@ struct WorkspaceView: View {
         store.pendingWorkspaceAction = nil
     }
 
+    private func syncHelpText(for project: FSProject) -> String {
+        let state = store.syncState(for: project.id)
+        switch state {
+        case .working:
+            return L10n.string("Synchronizing…")
+        case .failed:
+            return L10n.string("Sync failed")
+        case .succeeded, .idle:
+            guard let lastSyncedAt = project.gitRepository?.lastSyncedAt else {
+                return L10n.string("Share & Sync")
+            }
+            return "\(L10n.string("Last synchronized")): \(lastSyncedAt.formatted(date: .abbreviated, time: .shortened))"
+        }
+    }
+
     private var workspaceCommandActions: WorkspaceCommandActions {
         WorkspaceCommandActions(
             hasSelectedProject: store.selectedProject != nil,
@@ -555,43 +579,36 @@ struct WorkspaceView: View {
     }
 }
 
-private struct ProjectSyncIndicator: View {
+private struct ProjectSyncToolbarLabel: View {
     let state: ProjectSyncState
-    let lastSyncedAt: Date?
+    let isShared: Bool
 
     var body: some View {
         Group {
             switch state {
             case .working:
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(L10n.string("Synchronizing…"))
-                }
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel(L10n.string("Synchronizing…"))
             case .failed:
-                Label(L10n.string("Sync failed"), systemImage: "exclamationmark.icloud.fill")
+                Label(L10n.string("Sync"), systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(.red)
-            case .succeeded:
-                Label(L10n.string("Synchronized"), systemImage: "checkmark.icloud.fill")
-                    .foregroundStyle(.green)
-            case .idle:
-                if lastSyncedAt != nil {
-                    Label(L10n.string("Synchronized"), systemImage: "checkmark.icloud")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Label(L10n.string("Waiting to sync"), systemImage: "icloud")
-                        .foregroundStyle(.secondary)
-                }
+            case .succeeded, .idle:
+                Label(
+                    L10n.string(isShared ? "Sync" : "Share"),
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .labelStyle(.iconOnly)
+                .foregroundStyle(isSucceeded ? Color.green : Color.primary)
             }
         }
-        .font(.caption.weight(.medium))
-        .help(helpText)
         .accessibilityElement(children: .combine)
     }
 
-    private var helpText: String {
-        guard let lastSyncedAt else { return L10n.string("This project has not synchronized yet.") }
-        return "\(L10n.string("Last synchronized")): \(lastSyncedAt.formatted(date: .abbreviated, time: .shortened))"
+    private var isSucceeded: Bool {
+        if case .succeeded = state { return true }
+        return false
     }
 }
 

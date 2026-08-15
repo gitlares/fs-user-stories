@@ -8,6 +8,7 @@ struct StoryDetailView: View {
     @State private var showsDeleteStoryConfirmation = false
     @State private var notesText = ""
     @State private var notesAreExpanded = false
+    private let criterionEditorAnchor = "new-criterion-editor"
 
     let story: UserStory
     let project: FSProject
@@ -25,25 +26,36 @@ struct StoryDetailView: View {
     let deleteAttachment: (UUID) -> String?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                header
-                storyStatement
-                acceptanceCriteria
-                completionProgress
-                notesSection
-                AttachmentsSection(
-                    attachments: story.attachments,
-                    isEditable: isEditable,
-                    addFiles: addAttachments,
-                    fileURL: attachmentURL,
-                    deleteFile: deleteAttachment
-                )
-                completionAction
-                metadata
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    header
+                    storyStatement
+                    acceptanceCriteria
+                    completionProgress
+                    notesSection
+                    AttachmentsSection(
+                        attachments: story.attachments,
+                        isEditable: isEditable,
+                        addFiles: addAttachments,
+                        fileURL: attachmentURL,
+                        deleteFile: deleteAttachment
+                    )
+                    completionAction
+                    metadata
+                }
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(36)
             }
-            .frame(maxWidth: 720, alignment: .leading)
-            .padding(36)
+            .onChange(of: isAddingCriterion) {
+                guard isAddingCriterion else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        scrollProxy.scrollTo(criterionEditorAnchor, anchor: .center)
+                    }
+                }
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .task(id: story.id) {
@@ -266,6 +278,7 @@ struct StoryDetailView: View {
                             .padding(.leading, 32)
                     }
                     criterionEditor
+                        .id(criterionEditorAnchor)
                 }
             }
         }

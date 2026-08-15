@@ -49,7 +49,7 @@ agents, and uses Git only when the user chooses to share a project.
 > FS User Stories does not manage your team, your dates, or your company. It only
 > makes clear what needs to be built.
 
-## Alpha 7 — Version 0.1.0 (Build 7)
+## Alpha 8 — Version 0.1.0 (Build 8)
 
 The first team-testing alpha is already a functional product, not a static UI
 prototype. It includes a signed and notarized Apple Silicon application with the
@@ -84,7 +84,7 @@ following capabilities.
   feed.
 - Export all, Active, Completed, Draft, or manually selected stories into one
   readable Markdown file; review and import selected stories from the same open
-  format. Attachments are intentionally excluded from this transfer in Alpha 7.
+  format. Attachments are intentionally excluded from this transfer in Alpha 8.
 
 ### Managed attachments
 
@@ -111,7 +111,7 @@ The app runs a loopback-only MCP server while it is open. The MCP screen shows
 the live status, URL, port, and connection instructions; the same status is also
 visible in the app footer and menu bar.
 
-Alpha 7 exposes 27 tools covering the product's real operations:
+Alpha 8 exposes 27 tools covering the product's real operations:
 
 - Describe the application and list or inspect projects.
 - Create projects and inspect repository status.

@@ -275,6 +275,8 @@
 "Use Shared" = "Usar la compartida";
 "Finish Synchronizing" = "Finalizar sincronización";
 "Project" = "Proyecto";
+"Share" = "Compartir";
+"Sync" = "Sincronizar";
 "Profile" = "Perfil";
 "Profiles" = "Perfiles";
 "Profile name" = "Nombre del perfil";

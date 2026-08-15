@@ -101,6 +101,7 @@ final class AppStore {
                 stateChanged: { [weak self] state in self?.mcpServerState = state }
             )
             localMCPServer = server
+            AppLifecycleDelegate.mcpServer = server
             mcpServerState = .starting
             try server.start()
         } catch {

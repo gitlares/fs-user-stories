@@ -2,6 +2,32 @@
 
 All notable public changes to FS User Stories are documented here.
 
+## 0.1.0 Alpha 8 — 2026-08-14
+
+### Changed
+
+- Refined the native macOS toolbar so synchronization, project options, profile
+  creation, and story creation are grouped by intent without a detached status
+  control.
+- The synchronization action now communicates working, successful, and failed
+  states directly through the same toolbar control and its contextual help.
+- The direct-download build is explicitly identified as a separate distribution
+  channel while sharing the same Swift interface and Rust core as the Store build.
+
+### Fixed
+
+- Adding an acceptance criterion now scrolls the editor into view and places
+  keyboard focus in the new multiline field.
+- Quitting the application stops its embedded MCP core, and direct builds can
+  safely recover the fixed local MCP endpoint from an older owned process.
+- The bundled Rust core is built and validated as Apple Silicon arm64 to match
+  the published macOS compatibility policy.
+
+### Verified
+
+- Rust and Swift tests cover MCP endpoint ownership, lifecycle behavior, GitHub
+  sharing contracts, and distribution-channel metadata.
+
 ## 0.1.0 Alpha 7 — 2026-08-14
 
 ### Fixed

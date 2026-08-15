@@ -105,6 +105,12 @@ h1 { margin: 0; font-size: clamp(58px, 7vw, 88px); line-height: .94; letter-spac
 .install-card p:not(.eyebrow) { max-width: 640px; margin: 12px 0 0; color: #dfdfff; font-size: 14px; line-height: 1.6; }
 footer { min-height: 90px; padding: 28px 0; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); color: #7b7d8a; font-size: 12px; }
 footer div { display: flex; gap: 22px; }
+.legal-page { max-width: 820px; padding: 72px 0 110px; }
+.legal-page h1 { font-size: clamp(52px, 7vw, 76px); }
+.legal-page section { margin-top: 48px; padding-top: 1px; }
+.legal-page h2 { margin: 0 0 14px; font-size: 25px; letter-spacing: -.035em; }
+.legal-page section p { color: var(--muted); font-size: 16px; line-height: 1.7; }
+.legal-page section a { color: #4540bd; text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 920px) {
   .hero { grid-template-columns: 1fr; }

@@ -7,8 +7,11 @@
 
 use std::{
     fs,
-    io::Read,
+    io::{Read, Write},
+    net::{Ipv4Addr, SocketAddrV4, TcpStream},
     path::{Path, PathBuf},
+    thread,
+    time::Duration,
 };
 
 use chrono::Utc;
@@ -79,8 +82,7 @@ pub fn run(config: MCPServerConfig) -> Result<(), CoreError> {
     fs::create_dir_all(&config.attachments_root)?;
     // Opening here validates/migrates the sole shared database before reporting ready.
     WorkspaceStore::open(&config.database_path)?;
-    let server = Server::http(("127.0.0.1", config.port))
-        .map_err(|error| CoreError::Io(std::io::Error::other(error.to_string())))?;
+    let server = bind_or_follow_existing_server(config.port)?;
 
     for mut request in server.incoming_requests() {
         if !is_trusted_origin(&request) {
@@ -105,6 +107,54 @@ pub fn run(config: MCPServerConfig) -> Result<(), CoreError> {
         let _ = request.respond(response);
     }
     Ok(())
+}
+
+fn bind_or_follow_existing_server(port: u16) -> Result<Server, CoreError> {
+    loop {
+        match Server::http(("127.0.0.1", port)) {
+            Ok(server) => return Ok(server),
+            Err(_error) if existing_fs_user_stories_server(port) => {
+                // A previous app build is still alive in the menu bar. Keep this
+                // process as a lightweight successor: the existing server remains
+                // usable now, and this process takes over the fixed endpoint as
+                // soon as the previous instance quits.
+                thread::sleep(Duration::from_secs(1));
+            }
+            Err(error) => {
+                return Err(CoreError::InvalidMCPConfiguration(format!(
+                    "Port {port} could not be opened: {error}"
+                )));
+            }
+        }
+    }
+}
+
+fn existing_fs_user_stories_server(port: u16) -> bool {
+    let address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let Ok(mut stream) = TcpStream::connect_timeout(&address.into(), Duration::from_millis(300))
+    else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"FS User Stories app","version":"1"}}}"#;
+    let request = format!(
+        "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() {
+        return false;
+    }
+    response
+        .split_once("\r\n\r\n")
+        .and_then(|(_, body)| serde_json::from_str::<Value>(body).ok())
+        .and_then(|value| value.pointer("/result/serverInfo/name").cloned())
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .is_some_and(|name| name == "FS User Stories")
 }
 
 fn is_trusted_origin(request: &tiny_http::Request) -> bool {

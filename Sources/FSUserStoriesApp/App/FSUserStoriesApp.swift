@@ -3,7 +3,10 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
+    static weak var mcpServer: RustMCPServer?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
 
@@ -30,6 +33,10 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
                 window.makeKeyAndOrderFront(nil)
             }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.mcpServer?.stop()
     }
 }
 

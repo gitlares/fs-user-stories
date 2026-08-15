@@ -5,6 +5,22 @@ import XCTest
 @testable import FSUserStoriesApp
 
 final class GitHubServiceContractTests: XCTestCase {
+    func testAppStoreDistributionIsReadFromDedicatedMetadata() {
+        XCTAssertTrue(AppDistribution.isMacAppStore(infoDictionary: ["FSDistributionChannel": "App Store"]))
+        XCTAssertFalse(AppDistribution.isMacAppStore(infoDictionary: ["FSDistributionChannel": "Direct Download"]))
+        XCTAssertFalse(AppDistribution.isMacAppStore(infoDictionary: [:]))
+    }
+
+    func testOnlyRecognizesOwnedMCPExecutablesForTakeover() {
+        XCTAssertTrue(
+            RustMCPServer.isOwnedMCPExecutable(
+                "/Applications/FS User Stories.app/Contents/Resources/FSUserStories_FSUserStoriesApp.bundle/fs-user-stories-core"
+            )
+        )
+        XCTAssertFalse(RustMCPServer.isOwnedMCPExecutable("/tmp/fs-user-stories-core"))
+        XCTAssertFalse(RustMCPServer.isOwnedMCPExecutable("/Applications/Another App.app/server"))
+    }
+
     func testDecodesRustDeviceAuthorizationContract() throws {
         let data = Data(
             #"{"deviceCode":"device","userCode":"ABCD-EFGH","verificationUrl":"https://github.com/login/device","expiresAt":"2026-08-14T20:00:00Z","interval":5}"#.utf8

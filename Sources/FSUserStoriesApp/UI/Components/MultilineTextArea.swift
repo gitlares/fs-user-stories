@@ -36,7 +36,9 @@ struct MultilineTextArea: View {
                 )
         }
         .onAppear {
-            if automaticallyFocus {
+            guard automaticallyFocus else { return }
+            Task { @MainActor in
+                await Task.yield()
                 isFocused = true
             }
         }
