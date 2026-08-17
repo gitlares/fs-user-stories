@@ -7,13 +7,19 @@ Item {
     id: root
 
     function openCreateProject() {
+        newName.text = ""
+        newPrefix.text = ""
         createDialog.open()
+    }
+
+    function openJoinShared() {
+        joinDialog.open()
     }
 
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 18
-        width: 480
+        width: 460
 
         Label {
             text: qsTr("Welcome to FS User Stories")
@@ -27,35 +33,70 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            opacity: 0.75
+            opacity: 0.7
         }
 
-        ListView {
-            id: projectList
+        Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 240
-            model: workspace.projects
-            clip: true
-            delegate: ItemDelegate {
-                width: ListView.view ? ListView.view.width : 0
-                text: modelData.name + "  ·  " + modelData.prefix
-                onClicked: {
-                    workspace.openProject(modelData.id)
-                    settings.lastProjectId = modelData.id
+            Layout.preferredHeight: projectsList.count > 0 ? (projectsList.count * 48 + 16) : 0
+            visible: projectsList.count > 0
+            color: palette.base
+            border.color: palette.mid
+            border.width: 1
+            radius: 6
+
+            ListView {
+                id: projectsList
+                anchors.fill: parent
+                anchors.margins: 1
+                clip: true
+                model: workspace.projects
+                spacing: 0
+                delegate: ItemDelegate {
+                    width: ListView.view ? ListView.view.width : 0
+                    height: 48
+                    contentItem: RowLayout {
+                        spacing: 12
+                        Label {
+                            text: modelData.name + "  ·  " + modelData.prefix
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 12
+                            font.pixelSize: 14
+                        }
+                        Label {
+                            text: modelData.id.substr(0, 8)
+                            font.family: "monospace"
+                            opacity: 0.4
+                            font.pixelSize: 11
+                            Layout.rightMargin: 12
+                        }
+                    }
+                    onClicked: {
+                        workspace.openProject(modelData.id)
+                        settings.lastProjectId = modelData.id
+                    }
                 }
             }
-            Label {
-                anchors.centerIn: parent
-                visible: projectList.count === 0
-                text: qsTr("No projects yet. Create one to get started.")
-                opacity: 0.6
-            }
         }
 
-        Button {
-            text: qsTr("New project…")
+        ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
-            onClicked: root.openCreateProject()
+            spacing: 8
+
+            Button {
+                text: qsTr("+  New Project")
+                font.pixelSize: 14
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 220
+                onClicked: root.openCreateProject()
+            }
+            Button {
+                text: qsTr("👥  Join Shared Project")
+                font.pixelSize: 14
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 220
+                onClicked: root.openJoinShared()
+            }
         }
     }
 
@@ -64,13 +105,13 @@ Item {
         title: qsTr("Create a new project")
         modal: true
         anchors.centerIn: parent
-        width: 360
+        width: 380
         contentItem: ColumnLayout {
             spacing: 8
             Label { text: qsTr("Name") }
-            TextField { id: newName; placeholderText: qsTr("My project") }
-            Label { text: qsTr("Prefix") }
-            TextField { id: newPrefix; placeholderText: "ABC" }
+            TextField { id: newName; placeholderText: qsTr("My project"); Layout.fillWidth: true }
+            Label { text: qsTr("Prefix (3 letters, uppercase)") }
+            TextField { id: newPrefix; placeholderText: qsTr("ABC"); Layout.fillWidth: true; maxLength: 3 }
         }
         footer: DialogButtonBox {
             Button {
@@ -78,7 +119,7 @@ Item {
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 enabled: newName.text.trim() !== "" && newPrefix.text.trim() !== ""
                 onClicked: {
-                    workspace.createProject(newName.text.trim(), newPrefix.text.trim())
+                    var id = workspace.createProject(newName.text.trim(), newPrefix.text.trim().toUpperCase())
                     createDialog.close()
                 }
             }
@@ -86,6 +127,46 @@ Item {
                 text: qsTr("Cancel")
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 onClicked: createDialog.close()
+            }
+        }
+    }
+
+    Dialog {
+        id: joinDialog
+        title: qsTr("Join Shared Project")
+        modal: true
+        anchors.centerIn: parent
+        width: 460
+        contentItem: ColumnLayout {
+            spacing: 8
+            Label {
+                text: qsTr("Paste the invitation URL or share token you received:")
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+            TextField {
+                id: inviteToken
+                placeholderText: qsTr("https://…/invitation/… or fs-invite:TOKEN")
+                Layout.fillWidth: true
+            }
+        }
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Join")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                enabled: inviteToken.text.trim() !== ""
+                onClicked: {
+                    // WorkspaceController exposes joinSharedProject via the
+                    // accept_invitation core command once we wire it. For now
+                    // surface a friendly message and reload.
+                    workspace.acceptInvitation(inviteToken.text.trim())
+                    joinDialog.close()
+                }
+            }
+            Button {
+                text: qsTr("Cancel")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                onClicked: joinDialog.close()
             }
         }
     }

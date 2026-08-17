@@ -183,7 +183,7 @@ void WorkspaceController::createStory(const QString &title,
         {"command", "apply_stored_workspace_command"},
         {"database_path", m_databasePath},
         {"project_id", m_currentProjectId},
-        {"operation", "create_story"},
+        {"operation", "add_story"},
         {"title", title},
         {"asA", asA},
         {"iWant", iWant},
@@ -284,6 +284,14 @@ void WorkspaceController::synchronize()
     }
     emit info(tr("Project synchronized."));
     refreshCurrent();
+}
+
+void WorkspaceController::acceptInvitation(const QString &invitationToken)
+{
+    Q_UNUSED(invitationToken);
+    setError(tr("Joining shared projects is not yet wired in this build. "
+                "Add a guest copy of the workspace.sqlite + Repositories folder "
+                "for now — see project docs."));
 }
 
 void WorkspaceController::exportMarkdown(const QUrl &targetFile)

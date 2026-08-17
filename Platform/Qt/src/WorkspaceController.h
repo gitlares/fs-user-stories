@@ -62,6 +62,11 @@ public:
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
 
+    /// Joins a shared project via an invitation URL or token. The actual
+    /// implementation calls into the Rust core (read_invitation / clone_shared)
+    /// but here we expose a stub until that path is wired end to end.
+    Q_INVOKABLE void acceptInvitation(const QString &invitationToken);
+
 signals:
     void projectsChanged();
     void currentProjectChanged();
