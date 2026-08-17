@@ -6,6 +6,10 @@
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QIcon>
+#include <QFontDatabase>
+#include <QFont>
+#include <QFile>
+#include <QDir>
 #include <QLoggingCategory>
 
 #include "AppInfo.h"
@@ -14,6 +18,36 @@
 #include "WorkspaceController.h"
 
 using namespace fsuserstories;
+
+// String identifiers used by QML for icon ligatures that map to
+// Material Symbols glyphs (the open-source cousin of Apple SF Symbols).
+// Use these as the `text` of a Label whose `font.family` is set via the
+// `appIconFont` context property (added below).
+namespace IconLigatures {
+    constexpr auto Refresh       = "refresh";
+    constexpr auto Sync          = "sync";
+    constexpr auto More          = "more_horiz";
+    constexpr auto Plus          = "add";
+    constexpr auto NewProject    = "create_new_folder";
+    constexpr auto JoinShared    = "person_add";
+    constexpr auto AddProfile    = "person_add";
+    constexpr auto AddStory      = "edit_square";
+    constexpr auto Edit          = "edit";
+    constexpr auto Folder        = "folder";
+    constexpr auto Done          = "check_circle";
+    constexpr auto Active        = "play_circle";
+    constexpr auto Draft         = "edit_note";
+    constexpr auto Check         = "check";
+    constexpr auto Lock          = "lock";
+    constexpr auto Stories       = "book";
+    constexpr auto Profiles      = "group";
+    constexpr auto Search        = "search";
+    constexpr auto Trash         = "delete";
+    constexpr auto About         = "info";
+    constexpr auto External      = "open_in_new";
+    constexpr auto Running       = "hourglass_top";
+    constexpr auto Error         = "error";
+}
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +58,33 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("fs-user-stories")));
+
+    // Load Material Symbols Outlined (OFL-licensed, OFL file bundled at
+    // <bindir>/resources/fonts/MaterialSymbolsOutlined-Variable.woff2 by the
+    // POST_BUILD step in CMakeLists). Returns the family name to use in QML.
+    QString iconFontFamily = QStringLiteral("Material Symbols Outlined");
+    const QString fontPath =
+        QCoreApplication::applicationDirPath() +
+        QStringLiteral("/resources/fonts/MaterialSymbolsOutlined-Variable.woff2");
+    if (QFile::exists(fontPath)) {
+        const int fontId = QFontDatabase::addApplicationFont(fontPath);
+        if (fontId >= 0) {
+            const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+            if (!families.isEmpty()) {
+                iconFontFamily = families.first();
+            }
+        }
+    }
+
+    // Default font for the app: system default body, sized for the platform.
+    QFont uiFont = app.font();
+#ifdef Q_OS_WIN
+    uiFont.setPointSize(10);
+#elif defined(Q_OS_LINUX)
+    uiFont.setPointSize(10);
+#endif
+    app.setFont(uiFont);
+
     QQuickStyle::setStyle(QStringLiteral("Fusion"));
 
     const QString corePath = CorePaths::resolveCoreExecutable();
@@ -34,9 +95,6 @@ int main(int argc, char *argv[])
 
     auto client = std::make_unique<CoreClient>(corePath, QStringList{},
                                                CoreClient::Mode::OneShot);
-    // No startup probe: OneShot mode lazily spawns the core on the first
-    // command (controller.load() below). The Swift bridge follows the same
-    // pattern. We rely on the controller error path to surface failures.
 
     WorkspaceController controller;
     controller.setCoreClient(std::move(client), corePath);
@@ -59,6 +117,8 @@ int main(int argc, char *argv[])
             {"version", AppInfo::version()},
             {"corePath", corePath},
         });
+    engine.rootContext()->setContextProperty("appIconFont", iconFontFamily);
+    engine.rootContext()->setContextProperty("appIcons", QString());
     engine.loadFromModule("FSUserStories", "Main");
     if (engine.rootObjects().isEmpty()) {
         return 1;

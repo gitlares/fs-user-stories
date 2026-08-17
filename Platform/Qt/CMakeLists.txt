@@ -60,6 +60,7 @@ qt_add_qml_module(FSUserStories
         src/qml/GitSyncView.qml
     RESOURCES
         resources/fs-user-stories.desktop
+        resources/fonts/MaterialSymbolsOutlined-Variable.woff2
 )
 
 target_link_libraries(FSUserStories PRIVATE
@@ -69,6 +70,17 @@ target_link_libraries(FSUserStories PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
+)
+
+# Bundle Material Symbols Outlined icon font alongside the binary. main.cpp
+# loads it at startup so QML can use icon ligatures (e.g. "person_badge_plus")
+# in place of SF Symbol names.
+add_custom_command(TARGET FSUserStories POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsOutlined-Variable.woff2"
+            "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts/"
 )
 
 target_include_directories(FSUserStories PRIVATE src)

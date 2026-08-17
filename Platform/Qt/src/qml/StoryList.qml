@@ -7,113 +7,164 @@ Item {
     id: root
     signal storySelected(var story)
 
+    component IconLabel: Label {
+        font.family: appIconFont
+        font.pixelSize: 16
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ---- Top section: tabs + title row ----
-        Rectangle {
+        // ---- Segmented picker: Stories / Profiles (matches mac segmented control) ----
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 72
-            color: "transparent"
-            ColumnLayout {
+            Layout.preferredHeight: 56
+            RowLayout {
                 anchors.fill: parent
                 anchors.margins: 16
                 spacing: 8
 
-                RowLayout {
-                    spacing: 4
-                    Button {
-                        text: qsTr("Stories")
-                        flat: true
-                        font.weight: Font.DemiBold
-                    }
-                    Button {
-                        text: qsTr("Profiles")
-                        flat: true
-                        opacity: 0.6
-                    }
-                    Item { Layout.fillWidth: true }
-                    Label {
-                        text: qsTr("Stories")
-                        font.pixelSize: 22
-                        font.weight: Font.Bold
-                    }
-                    Label {
-                        text: workspace.currentStoryModel ? workspace.currentStoryModel.count : 0
-                        opacity: 0.5
-                        font.pixelSize: 16
+                Rectangle {
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 28
+                    Layout.alignment: Qt.AlignHCenter
+                    radius: 14
+                    color: Qt.rgba(0, 0, 0, 0.04)
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        spacing: 0
+                        Repeater {
+                            model: [
+                                { label: qsTr("Stories"),  icon: "book",   active: true  },
+                                { label: qsTr("Profiles"), icon: "group",  active: false }
+                            ]
+                            delegate: ItemDelegate {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                visible: true
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 12
+                                    color: modelData.active ? palette.base : "transparent"
+                                    border.color: modelData.active ? palette.mid : "transparent"
+                                    border.width: 0.5
+                                }
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    IconLabel { text: modelData.icon; font.pixelSize: 14; opacity: 0.8 }
+                                    Label {
+                                        text: modelData.label
+                                        font.pixelSize: 12
+                                        font.weight: modelData.active ? Font.DemiBold : Font.Normal
+                                    }
+                                }
+                                onClicked: /* toggle - placeholder */ { }
+                            }
+                        }
                     }
                 }
 
-                TextField {
-                    id: searchField
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("Search stories")
-                    onTextChanged: workspace.searchCurrent(text)
+                Item { Layout.fillWidth: true }
+
+                // Search field
+                Rectangle {
+                    Layout.preferredWidth: 200
+                    Layout.preferredHeight: 28
+                    radius: 6
+                    color: Qt.rgba(0, 0, 0, 0.04)
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 4
+                        spacing: 4
+                        IconLabel { text: "search"; font.pixelSize: 14; opacity: 0.55 }
+                        TextField {
+                            id: searchField
+                            Layout.fillWidth: true
+                            background: null
+                            placeholderText: qsTr("Search stories")
+                            font.pixelSize: 12
+                            onTextChanged: workspace.searchCurrent(text)
+                        }
+                    }
                 }
             }
         }
 
-        Rectangle {
+        // Story count header (large)
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: "#e0e0e0"
+            Layout.preferredHeight: 56
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 8
+                Label {
+                    text: qsTr("Stories")
+                    font.pixelSize: 22; font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: workspace.currentStoryModel ? workspace.currentStoryModel.count : 0
+                    font.pixelSize: 22; opacity: 0.5
+                }
+            }
         }
 
-        // ---- Filters row ----
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
+
+        // ---- Filters / sort row ----
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
+            Layout.topMargin: 10; Layout.bottomMargin: 10
+            Layout.leftMargin: 16; Layout.rightMargin: 16
             spacing: 8
             ComboBox {
-                id: profileFilter
                 Layout.fillWidth: true
-                model: workspace.currentProjectId === "" ? [] : [qsTr("All Profiles")]
-                onCurrentTextChanged: workspace.searchCurrent(searchField.text, statusFilter.currentValue, currentValue)
+                model: [qsTr("All Profiles")]
+                onActivated: workspace.searchCurrent(searchField.text, statusFilter.currentValue, currentValue)
             }
             ComboBox {
                 id: statusFilter
                 model: [qsTr("All"), qsTr("Active"), qsTr("Drafts"), qsTr("Completed")]
-                onCurrentTextChanged: workspace.searchCurrent(searchField.text, currentValue)
+                onActivated: workspace.searchCurrent(searchField.text, currentValue)
             }
             ComboBox {
-                id: sortBox
                 model: [qsTr("Oldest First"), qsTr("Newest First")]
-                onCurrentTextChanged: workspace.searchCurrent(searchField.text, statusFilter.currentValue, profileFilter.currentValue)
+                onActivated: workspace.searchCurrent(searchField.text, statusFilter.currentValue)
             }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: "#e0e0e0"
-        }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
 
-        // ---- Stories sectioned list ----
+        // ---- Stories list ----
         ListView {
             id: list
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: workspace.currentStoryModel
             clip: true
-            spacing: 0
             delegate: ItemDelegate {
                 width: ListView.view ? ListView.view.width : 0
-                height: 36
+                height: 38
                 contentItem: RowLayout {
                     spacing: 8
                     anchors.margins: 0
                     Rectangle {
                         width: 8; height: 8; radius: 4
+                        Layout.leftMargin: 16
                         color: {
                             if (status === "done" || status === "completed") return "#22c55e"
                             if (status === "active") return "#3b82f6"
                             return "#a3a3a3"
                         }
-                        Layout.leftMargin: 16
                     }
                     Label {
                         text: title
@@ -124,12 +175,10 @@ Item {
                     }
                     Label {
                         text: status
-                        font.pixelSize: 10
-                        opacity: 0.5
+                        font.pixelSize: 10; opacity: 0.5
                         Layout.rightMargin: 12
                     }
                 }
-                highlighted: ListView.isCurrentItem
                 onClicked: {
                     list.currentIndex = index
                     storySelected({
@@ -146,58 +195,16 @@ Item {
             }
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: "#e0e0e0"
-        }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
 
-        // ---- New story button ----
         Button {
             Layout.fillWidth: true
             Layout.margins: 8
             text: qsTr("New story…")
             flat: true
-            onClicked: newStoryDialog.open()
+            onClicked: /* opened from toolbar in main */ { }
         }
 
-        Dialog {
-            id: newStoryDialog
-            title: qsTr("New story")
-            modal: true
-            anchors.centerIn: parent
-            width: 420
-            contentItem: ColumnLayout {
-                spacing: 6
-                TextField { id: newTitle; placeholderText: qsTr("Title"); Layout.fillWidth: true }
-                TextField { id: newAsA; placeholderText: qsTr("As a"); Layout.fillWidth: true }
-                TextField { id: newIWant; placeholderText: qsTr("I want"); Layout.fillWidth: true }
-                TextField { id: newSoThat; placeholderText: qsTr("So that"); Layout.fillWidth: true }
-            }
-            footer: DialogButtonBox {
-                Button {
-                    text: qsTr("Create")
-                    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                    enabled: newTitle.text.trim() !== ""
-                    onClicked: {
-                        workspace.createStory(newTitle.text.trim(),
-                                              newAsA.text.trim(),
-                                              newIWant.text.trim(),
-                                              newSoThat.text.trim())
-                        newStoryDialog.close()
-                    }
-                }
-                Button {
-                    text: qsTr("Cancel")
-                    DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                    onClicked: newStoryDialog.close()
-                }
-            }
-        }
-
-        // Helper to wire detail panel
-        function clearSelection() {
-            list.currentIndex = -1
-        }
+        function clearSelection() { list.currentIndex = -1 }
     }
 }

@@ -6,18 +6,11 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    // Helper for progress dots: "1/5"
-    function progressText(prefix, projectId) {
-        var p = null
-        for (var i = 0; i < workspace.projects.length; i++) {
-            if (workspace.projects[i].id === projectId) p = workspace.projects[i]
-        }
-        if (!p) return ""
-        var total = 0, done = 0
-        // storyModel exposes currentProjectId via QML binding
-        if (storyModel && storyModel.storyCount !== undefined) total = storyModel.storyCount
-        if (storyModel && storyModel.doneCount !== undefined) done = storyModel.doneCount
-        return done + "/" + total
+    component IconLabel: Label {
+        font.family: appIconFont
+        font.pixelSize: 14
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
     }
 
     RowLayout {
@@ -28,18 +21,19 @@ Item {
         Rectangle {
             id: sidebar
             Layout.preferredWidth: 240
+            Layout.minimumWidth: 200
+            Layout.maximumWidth: 300
             Layout.fillHeight: true
-            color: "#fafafa"
+            color: palette.alternateBase
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 0
                 spacing: 0
 
                 // Projects header
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
+                    Layout.preferredHeight: 36
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
@@ -47,76 +41,80 @@ Item {
                         Label {
                             text: qsTr("Projects")
                             font.weight: Font.DemiBold
-                            font.pixelSize: 13
-                            opacity: 0.6
+                            font.pixelSize: 11
+                            opacity: 0.55
                             Layout.fillWidth: true
                         }
                     }
                 }
 
-                // Project list
+                // Project list — folder icon + name + progress dots on the right
                 ListView {
                     id: projectList
                     Layout.fillWidth: true
                     Layout.preferredHeight: 200
                     model: workspace.projects
                     clip: true
-                    spacing: 0
                     delegate: ItemDelegate {
                         width: ListView.view ? ListView.view.width : 0
-                        height: 52
+                        height: 50
                         highlighted: modelData.id === workspace.currentProjectId
-                        contentItem: ColumnLayout {
-                            spacing: 2
+                        contentItem: RowLayout {
+                            spacing: 8
                             anchors.margins: 0
-                            Label {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: 16
-                                Layout.rightMargin: 12
-                                Layout.topMargin: 8
-                                text: modelData.name
-                                font.pixelSize: 13
-                                font.weight: modelData.id === workspace.currentProjectId ? Font.DemiBold : Font.Normal
-                                elide: Label.ElideRight
+                            IconLabel {
+                                text: "folder"
+                                Layout.leftMargin: 14
+                                Layout.rightMargin: 4
+                                opacity: 0.6
+                                color: highlighted ? "#4f56d2" : palette.text
                             }
-                            RowLayout {
-                                spacing: 8
-                                Layout.leftMargin: 16
-                                Layout.topMargin: 0
+                            ColumnLayout {
+                                spacing: 2
+                                Layout.fillWidth: true
                                 Label {
-                                    text: {
-                                        var total = modelData.stories ? modelData.stories.length : 0
-                                        var done = 0
-                                        if (modelData.stories) {
-                                            for (var i = 0; i < modelData.stories.length; i++) {
-                                                if (modelData.stories[i].status === "completed" ||
-                                                    modelData.stories[i].status === "done") done++
-                                            }
-                                        }
-                                        return done + "/" + total
-                                    }
-                                    font.pixelSize: 11
-                                    opacity: 0.5
                                     Layout.fillWidth: true
+                                    text: modelData.name
+                                    font.pixelSize: 13
+                                    font.weight: modelData.id === workspace.currentProjectId ? Font.DemiBold : Font.Normal
+                                    elide: Label.ElideRight
                                 }
-                                // Progress dots: ● ● ● ○ ○
-                                Label {
-                                    text: {
-                                        var total = modelData.stories ? modelData.stories.length : 0
-                                        var done = 0
-                                        if (modelData.stories) {
-                                            for (var i = 0; i < modelData.stories.length; i++) {
-                                                if (modelData.stories[i].status === "completed" ||
-                                                    modelData.stories[i].status === "done") done++
+                                RowLayout {
+                                    spacing: 6
+                                    Label {
+                                        text: {
+                                            var total = modelData.stories ? modelData.stories.length : 0
+                                            var done = 0
+                                            if (modelData.stories) {
+                                                for (var i = 0; i < modelData.stories.length; i++) {
+                                                    var s = modelData.stories[i].status
+                                                    if (s === "completed" || s === "done") done++
+                                                }
                                             }
+                                            return done + "/" + total
                                         }
-                                        var dots = ""
-                                        for (var j = 0; j < Math.min(total, 8); j++) dots += (j < done ? "●" : "○") + " "
-                                        return dots
+                                        font.pixelSize: 11; opacity: 0.55
+                                        Layout.fillWidth: true
                                     }
-                                    font.pixelSize: 10
-                                    opacity: 0.6
-                                    Layout.rightMargin: 12
+                                    // progress dots
+                                    Label {
+                                        text: {
+                                            var total = modelData.stories ? modelData.stories.length : 0
+                                            var done = 0
+                                            if (modelData.stories) {
+                                                for (var i = 0; i < modelData.stories.length; i++) {
+                                                    var s = modelData.stories[i].status
+                                                    if (s === "completed" || s === "done") done++
+                                                }
+                                            }
+                                            var dots = ""
+                                            for (var j = 0; j < Math.min(total, 8); j++)
+                                                dots += (j < done ? "●" : "○") + " "
+                                            return dots
+                                        }
+                                        font.pixelSize: 9; opacity: 0.6
+                                        Layout.rightMargin: 12
+                                    }
                                 }
                             }
                         }
@@ -127,83 +125,79 @@ Item {
                     }
                 }
 
-                Item { Layout.fillHeight: true }   // spacer
+                Item { Layout.fillHeight: true }
 
-                // MCP Active indicator (bottom of sidebar)
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: "#e0e0e0"
-                }
-                RowLayout {
+                // ---- MCP Active indicator ----
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: 12
-                    spacing: 6
-                    Rectangle {
-                        width: 8; height: 8; radius: 4
-                        color: "#22c55e"
+                    spacing: 4
+                    RowLayout {
+                        spacing: 7
+                        Rectangle { width: 8; height: 8; radius: 4; color: "#22c55e" }
+                        Label {
+                            text: qsTr("MCP Active")
+                            font.pixelSize: 12; font.weight: Font.DemiBold
+                            Layout.fillWidth: true
+                        }
                     }
                     Label {
-                        text: qsTr("MCP Active")
-                        font.weight: Font.DemiBold
-                        font.pixelSize: 12
                         Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        text: "http://127.0.0.1:49231/mcp"
+                        font.family: "monospace"
+                        font.pixelSize: 10
+                        opacity: 0.55
+                        elide: Label.ElideLeft
                     }
                 }
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 22
-                    Layout.bottomMargin: 4
-                    text: "http://127.0.0.1:49231/mcp"
-                    font.family: "monospace"
-                    font.pixelSize: 10
-                    opacity: 0.5
-                    elide: Label.ElideLeft
-                }
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
 
-                // New Project / Join Shared buttons
+                // ---- Bottom action buttons (like mac) ----
                 Button {
-                    text: qsTr("+  New Project")
+                    text: qsTr("New Project")
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 4
+                    Layout.leftMargin: 14; Layout.rightMargin: 14
+                    Layout.topMargin: 12
                     flat: true
+                    iconLabel: true
+                    contentItem: RowLayout {
+                        spacing: 10
+                        IconLabel { text: "add" }
+                        Label { text: qsTr("New Project"); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft }
+                    }
                     onClicked: welcome.openCreateProject()
                 }
                 Button {
-                    text: qsTr("👥  Join Shared Project")
+                    text: qsTr("Join Shared Project")
                     Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
+                    Layout.leftMargin: 14; Layout.rightMargin: 14
+                    Layout.topMargin: 4
                     Layout.bottomMargin: 12
                     flat: true
                     onClicked: welcome.openJoinShared()
+                    contentItem: RowLayout {
+                        spacing: 10
+                        IconLabel { text: "person_add" }
+                        Label { text: qsTr("Join Shared Project"); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft }
+                    }
                 }
             }
         }
 
-        // vertical divider
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            color: "#e0e0e0"
-        }
+        // divider
+        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: palette.mid }
 
-        // ---------- MIDDLE: Stories list ----------
+        // ---------- MIDDLE: Stories list with Picker (Stories/Profiles) ----------
         StoryList {
-            id: storyList
-            Layout.preferredWidth: 360
+            Layout.preferredWidth: 420
             Layout.fillHeight: true
-            onStorySelected: (story) => detailPane.setStory(story)
+            onStorySelected: (s) => detailPane.setStory(s)
         }
 
-        // vertical divider
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            color: "#e0e0e0"
-        }
+        // divider
+        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: palette.mid }
 
         // ---------- RIGHT: Story detail ----------
         StoryDetailView {
