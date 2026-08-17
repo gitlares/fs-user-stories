@@ -52,6 +52,14 @@ cp "$QT_PROJECT/core-bundle/fs-user-stories-core" \
 cp "$QT_PROJECT/resources/fs-user-stories.desktop" \
     "$APP_DIR/usr/share/applications/fs-user-stories.desktop"
 
+# Bundle the Material Symbols icon font next to the binary so main.cpp can
+# QFontDatabase::addApplicationFont(applicationDirPath() + "/resources/fonts/...").
+if [ -d "$BUILD_DIRECTORY/resources/fonts" ]; then
+    mkdir -p "$APP_DIR/usr/bin/resources/fonts"
+    cp -r "$BUILD_DIRECTORY/resources/fonts/"*.ttf \
+          "$APP_DIR/usr/bin/resources/fonts/" 2>/dev/null || true
+fi
+
 # Use the master icon if available, otherwise fall back to a placeholder.
 if [ -f "$PROJECT_DIRECTORY/Design/AppIcon-master.png" ]; then
     cp "$PROJECT_DIRECTORY/Design/AppIcon-master.png" \
