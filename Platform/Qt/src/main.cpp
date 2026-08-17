@@ -124,6 +124,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    controller.load();
+    // workspace.projects is populated by QML's own Component.onCompleted;
+    // main.cpp no longer needs to call controller.load() here.
     return app.exec();
 }

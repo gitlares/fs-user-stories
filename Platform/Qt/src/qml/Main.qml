@@ -30,6 +30,9 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        // Trigger initial workspace load, then auto-open the last project
+        // (or the first one if no preference has been recorded).
+        workspace.load()
         if (workspace.projects.length > 0) {
             var target = settings.lastProjectId
             var match = ""
