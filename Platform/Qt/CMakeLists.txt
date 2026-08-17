@@ -60,7 +60,7 @@ qt_add_qml_module(FSUserStories
         src/qml/GitSyncView.qml
     RESOURCES
         resources/fs-user-stories.desktop
-        resources/fonts/MaterialSymbolsOutlined-Variable.woff2
+        resources/fonts/MaterialSymbolsOutlined-Variable.ttf
 )
 
 target_link_libraries(FSUserStories PRIVATE
