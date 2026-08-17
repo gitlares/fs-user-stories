@@ -79,7 +79,7 @@ add_custom_command(TARGET FSUserStories POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsOutlined-Variable.woff2"
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsOutlined-Variable.ttf"
             "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts/"
 )
 

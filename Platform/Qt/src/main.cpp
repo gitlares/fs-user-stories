@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
     QString iconFontFamily = QStringLiteral("Material Symbols Outlined");
     const QString fontPath =
         QCoreApplication::applicationDirPath() +
-        QStringLiteral("/resources/fonts/MaterialSymbolsOutlined-Variable.woff2");
+        QStringLiteral("/resources/fonts/MaterialSymbolsOutlined-Variable.ttf");
     if (QFile::exists(fontPath)) {
         const int fontId = QFontDatabase::addApplicationFont(fontPath);
         if (fontId >= 0) {
