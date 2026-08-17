@@ -73,14 +73,26 @@ jobs:
           cmake --build Platform\Qt\build --parallel
           if errorlevel 1 exit /b 1
 
+      - name: Install NSIS (for single-file installer)
+        shell: pwsh
+        run: choco install -y nsis 2>&1 | Select-Object -Last 3
+
       - name: Bundle + zip
         shell: pwsh
         run: ./Scripts/build-windows-app.ps1
 
-      - name: Upload binary artifact
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fs-user-stories-windows
+          name: fs-user-stories-windows-zip
           path: Distribution/**/*.zip
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fs-user-stories-windows-installer
+          path: Distribution/Windows/FSUserStoriesSetup*.exe
+          if-no-files-found: warn
           retention-days: 14

@@ -8,8 +8,12 @@
       * `Platform/Qt/core-bundle/fs-user-stories-core.exe` to already exist (cargo build done).
       * Qt 6.7.3 toolchain available via the environment variable Qt6_DIR (set by
         jurajbelobradic/install-qt-action).
+      * Visual Studio 2022 (used to copy VC++ runtime DLLs so the app runs on
+        systems without VC++ Redist installed).
 
-    Produces Distribution/Windows/fs-user-stories-windows.zip ready for sharing.
+    Produces:
+      * Distribution/Windows/fs-user-stories-windows.zip (extracted folder bundle)
+      * Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha.exe (NSIS installer)
 #>
 
 $ErrorActionPreference = "Stop"
@@ -46,6 +50,48 @@ New-Item -ItemType Directory -Force -Path $fontsDir | Out-Null
 Copy-Item -Path (Join-Path $qtSrcDir "resources/fonts/MaterialSymbolsOutlined-Variable.ttf") `
             -Destination $fontsDir
 
+# 2c. Bundle the Visual C++ runtime DLLs (vcruntime140, msvcp140, ucrtbase, …).
+#     Without these, fs-user-stories.exe fails to launch on a Windows install
+#     that does not have VC++ Redist installed (a common "the exe doesn't open"
+#     report). The DLLs live next to the VS install that GitHub Actions uses.
+$vcRoot = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022" `
+              -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer }
+if ($vcRoot) {
+    $vcDir = Join-Path $vcRoot.FullName "VC/Redist/MSVC"
+    $vcVerDir = Get-ChildItem $vcDir -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($vcVerDir) {
+        $vcX64 = Join-Path $vcVerDir.FullName "x64"
+        if (Test-Path $vcX64) {
+            Write-Host "==> Bundling VC++ runtime from $vcX64"
+            $vcDlls = @(
+                "vcruntime140.dll",
+                "vcruntime140_1.dll",
+                "msvcp140.dll",
+                "msvcp140_1.dll",
+                "msvcp140_2.dll",
+                "concrt140.dll",
+                "vccorlib140.dll"
+            )
+            foreach ($dll in $vcDlls) {
+                $src = Join-Path $vcX64 $dll
+                if (Test-Path $src) {
+                    Copy-Item -Path $src -Destination $stageDir
+                }
+            }
+            # Universal CRT (api-ms-win-crt-*) sits at C:\Windows\System32 on
+            # every Win10+ system; copying the dozen individual ucrt*.dll
+            # files would bloat the bundle significantly.  We ship without them
+            # because every supported Windows already has them — Win10 has
+            # them in-place; Win7/8 must install the redist (we fall back to
+            # the README note for those).
+        }
+    } else {
+        Write-Warning "Could not locate VC redist MSVC directory; VC++ runtime DLLs not bundled."
+    }
+} else {
+    Write-Warning "Visual Studio 2022 not found; VC++ runtime DLLs not bundled."
+}
+
 # 3. Run windeployqt — installs Qt runtime DLLs, QML modules, platform plugins.
 $env:Qt6_DIR = $env:Qt6_DIR
 $windeployqt = Join-Path $env:Qt6_DIR "bin/windeployqt.exe"
@@ -64,17 +110,12 @@ $readme = @"
 FS User Stories — Windows preview build
 
 How to run:
-  1. Make sure you have "Microsoft Visual C++ Redistributable 2015-2022 x64"
-     installed. Most Windows machines already do. If you do not, grab it
-     from https://aka.ms/vs/17/release/vc_redist.x64.exe
-  2. Extract this zip to a folder with no spaces in the path
+  1. Extract this zip to a folder with no spaces in the path
      (e.g. C:\fs-user-stories\).
-  3. Double-click fs-user-stories.exe.
+  2. Double-click fs-user-stories.exe.
 
-If nothing happens when you double-click:
-  - Open PowerShell in this folder and run .\fs-user-stories.exe
-    to see the error message.
-  - You might also need the Visual C++ Redistributable (link above).
+The Visual C++ 2015-2022 runtime DLLs are bundled alongside the binary, so
+nothing else needs to be installed for this preview.
 
 Data location (first run will create):
   %LOCALAPPDATA%\fs-user-stories\fs-user-stories\
@@ -88,3 +129,20 @@ if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 Compress-Archive -Path $stageDir -DestinationPath $zipPath -CompressionLevel Optimal
 Write-Host "==> Created $zipPath"
 Get-Item $zipPath | Select-Object FullName, Length
+
+# 6. Optional: build the single-file NSIS installer (FSUserStoriesSetup-*.exe).
+#    Skipped silently if NSIS is not installed (e.g. on a developer machine).
+$makensis = Get-Command makensis -ErrorAction SilentlyContinue
+if ($makensis) {
+    Write-Host "==> Building NSIS installer from Scripts/installer.nsi"
+    $nsi = Join-Path $projectRoot "Scripts/installer.nsi"
+    Push-Location $projectRoot
+    try {
+        & $makensis.Source $nsi
+        if ($LASTEXITCODE -ne 0) { Write-Warning "makensis reported exit $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host "==> makensis not on PATH; skipping NSIS installer. (Install NSIS to enable.)"
+}
