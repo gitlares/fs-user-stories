@@ -97,7 +97,6 @@ Item {
             Button {
                 text: root.readOnly ? qsTr("Read-only") : qsTr("Edit Story")
                 flat: true
-                iconLabel: true
                 contentItem: RowLayout {
                     spacing: 6
                     BigIconLabel { text: root.readOnly ? "lock" : "edit" }
@@ -107,7 +106,6 @@ Item {
             }
 
             ToolButton {
-                iconLabel: true
                 contentItem: BigIconLabel { text: "more_horiz" }
                 onClicked: storyMenu.open()
                 Menu {
@@ -216,7 +214,6 @@ Item {
                 Layout.fillWidth: true
             }
             ToolButton {
-                iconLabel: true
                 contentItem: BigIconLabel { text: "add" }
                 ToolTip.text: qsTr("Add criterion")
                 ToolTip.visible: hovered

@@ -98,7 +98,7 @@ Item {
             Label { text: qsTr("Name") }
             TextField { id: npName; placeholderText: qsTr("My project"); Layout.fillWidth: true }
             Label { text: qsTr("Prefix (3 letters, uppercase)") }
-            TextField { id: npPrefix; placeholderText: qsTr("ABC"); Layout.fillWidth: true; maxLength: 3 }
+            TextField { id: npPrefix; placeholderText: qsTr("ABC"); Layout.fillWidth: true; maximumLength: 3 }
         }
         footer: DialogButtonBox {
             Button {

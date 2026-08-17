@@ -76,7 +76,6 @@ ApplicationWindow {
 
             // Sync indicator
             ToolButton {
-                iconLabel: true
                 contentItem: IconLabel { text: "sync" }
                 ToolTip.text: qsTr("Synchronize with Git")
                 ToolTip.visible: hovered
@@ -84,7 +83,6 @@ ApplicationWindow {
                 onClicked: workspace.synchronize()
             }
             ToolButton {
-                iconLabel: true
                 contentItem: IconLabel { text: "refresh" }
                 ToolTip.text: qsTr("Refresh")
                 ToolTip.visible: hovered
@@ -93,7 +91,6 @@ ApplicationWindow {
             }
             ToolButton {
                 visible: workspace.currentProjectId !== ""
-                iconLabel: true
                 contentItem: IconLabel { text: "person_add" }
                 ToolTip.text: qsTr("Add Profile")
                 ToolTip.visible: hovered
@@ -102,7 +99,6 @@ ApplicationWindow {
             }
             ToolButton {
                 visible: workspace.currentProjectId !== ""
-                iconLabel: true
                 contentItem: IconLabel { text: "edit_square" }
                 ToolTip.text: qsTr("Add Story")
                 ToolTip.visible: hovered
@@ -110,7 +106,6 @@ ApplicationWindow {
                 onClicked: newStoryDialog.open()
             }
             ToolButton {
-                iconLabel: true
                 contentItem: IconLabel { text: "more_horiz" }
                 ToolTip.text: qsTr("More")
                 ToolTip.visible: hovered
@@ -208,7 +203,7 @@ ApplicationWindow {
             Label { text: qsTr("Name") }
             TextField { id: npName; placeholderText: qsTr("My project"); Layout.fillWidth: true }
             Label { text: qsTr("Prefix (3 letters, uppercase)") }
-            TextField { id: npPrefix; placeholderText: qsTr("ABC"); Layout.fillWidth: true; maxLength: 3 }
+            TextField { id: npPrefix; placeholderText: qsTr("ABC"); Layout.fillWidth: true; maximumLength: 3 }
         }
         footer: DialogButtonBox {
             Button {
