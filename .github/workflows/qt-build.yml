@@ -1,10 +1,8 @@
-name: Qt build (Linux / Windows / macOS)
+name: Build Windows (Qt)
 
 on:
   push:
-    branches: [qt, main]
-  pull_request:
-    branches: [qt, main]
+    branches: [qt]
   workflow_dispatch:
 
 env:
@@ -12,40 +10,9 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build:
-    name: ${{ matrix.label }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            label: Linux (AppImage)
-            qt_host: linux
-            qt_target: desktop
-            qt_arch: gcc_64
-            qt_modules: "qtquickcontrols2,qtsvg"
-            rust_target: x86_64-unknown-linux-gnu
-            build_cmd: Scripts/build-linux-app.sh
-            artifact_glob: "Distribution/**/*.AppImage"
-          - os: windows-2022
-            label: Windows (zip)
-            qt_host: windows
-            qt_target: desktop
-            qt_arch: win64_msvc2019_64
-            qt_modules: "qtquickcontrols2,qtsvg"
-            rust_target: x86_64-pc-windows-msvc
-            build_cmd: Scripts/build-windows-app.ps1
-            artifact_glob: "Distribution/**/*.zip"
-          - os: macos-14
-            label: macOS (zip)
-            qt_host: mac
-            qt_target: desktop
-            qt_arch: clang_64
-            qt_modules: "qtquickcontrols2,qtsvg"
-            rust_target: x86_64-apple-darwin
-            build_cmd: Scripts/build-macos-app.sh
-            artifact_glob: "Distribution/**/*.zip"
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    name: Windows (zip)
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,56 +26,50 @@ jobs:
         shell: bash
         run: |
           python -m pip install --quiet --upgrade aqtinstall
-          # `qml`, `qtquick`, `qt5compat` ship with the base install. We only
-          # ask aqt for the add-on modules we actually need.
-          aqt install-qt "${{ matrix.qt_host }}" "${{ matrix.qt_target }}" "6.7.3" "${{ matrix.qt_arch }}" \
-            -O ./qt -m "${{ matrix.qt_modules }}"
-          echo "Qt6_DIR=$(pwd)/qt/6.7.3/${{ matrix.qt_arch }}" >> "$GITHUB_ENV"
+          aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 \
+            -O "$GITHUB_WORKSPACE/qt" -m qtquickcontrols2,qtsvg
+          echo "Qt6_DIR=$GITHUB_WORKSPACE/qt/6.7.3/win64_msvc2019_64" >> "$GITHUB_ENV"
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (MSVC)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rust_target }}
+          targets: x86_64-pc-windows-msvc
+
+      - name: Add MSVC + Windows SDK to PATH
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
           workspaces: "Core -> target"
-          shared-cache-key: ${{ matrix.os }}-cargo-${{ matrix.rust_target }}-${{ hashFiles('Core/Cargo.lock') }}
+          shared-cache-key: windows-cargo-${{ hashFiles('Core/Cargo.lock') }}
 
       - name: Build Rust core
         shell: bash
         run: |
           cd Core
-          cargo build --release --locked --target ${{ matrix.rust_target }}
+          cargo build --release --locked --target x86_64-pc-windows-msvc
           mkdir -p ../Platform/Qt/core-bundle
-          for f in target/${{ matrix.rust_target }}/release/fs-user-stories-core*; do
-            [ -e "$f" ] || continue
-            cp "$f" ../Platform/Qt/core-bundle/
-          done
-          ls -la ../Platform/Qt/core-bundle/
+          cp target/x86_64-pc-windows-msvc/release/fs-user-stories-core.exe ../Platform/Qt/core-bundle/
 
       - name: Configure + build Qt
-        shell: bash
+        shell: pwsh
         run: |
-          echo "Using Qt at $Qt6_DIR"
-          if [ "${{ matrix.os }}" = "windows-2022" ]; then
-            powershell -NoProfile -Command "cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=\"$env:Qt6_DIR\"; cmake --build Platform/Qt/build --parallel"
-          else
-            cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                  -DCMAKE_PREFIX_PATH="$Qt6_DIR"
-            cmake --build Platform/Qt/build --parallel
-          fi
+          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+                -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+          cmake --build Platform/Qt/build --parallel
 
-      - name: Run platform deployer
-        shell: bash
-        run: ${{ matrix.build_cmd }}
+      - name: Bundle + zip
+        shell: pwsh
+        run: ./Scripts/build-windows-app.ps1
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fs-user-stories-${{ matrix.os }}
-          path: ${{ matrix.artifact_glob }}
-          if-no-files-found: warn
+          name: fs-user-stories-windows
+          path: Distribution/**/*.zip
+          if-no-files-found: error
           retention-days: 14
