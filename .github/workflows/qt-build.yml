@@ -26,10 +26,15 @@ jobs:
         shell: bash
         run: |
           python -m pip install --quiet --upgrade aqtinstall
+          # aqtinstall with arch=win64_msvc2019_64 drops the bits into
+          # `6.7.3/msvc2019_64/`, NOT `win64_msvc2019_64/` (that surprises everyone).
+          # Qt 6.7 base install already includes Qml, Quick, QuickControls2,
+          # Widgets, Svg, etc., so no -m modules needed.
           aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 \
-            -O "$GITHUB_WORKSPACE/qt" \
-            -m qtquickcontrols2
-          echo "Qt6_DIR=$GITHUB_WORKSPACE/qt/6.7.3/win64_msvc2019_64" >> "$GITHUB_ENV"
+            -O "$GITHUB_WORKSPACE/qt"
+          echo "Qt6_DIR=$GITHUB_WORKSPACE/qt/6.7.3/msvc2019_64" >> "$GITHUB_ENV"
+          echo "--- bin contents ---"
+          ls "$GITHUB_WORKSPACE/qt/6.7.3/msvc2019_64/bin/windeployqt.exe"
 
       - name: Install Rust toolchain (MSVC)
         uses: dtolnay/rust-toolchain@stable
