@@ -6,7 +6,7 @@ FS User Stories is an open-source, local-first macOS application for writing and
 
 - Homepage: https://gitlares.github.io/fs-user-stories/
 - Source: https://github.com/gitlares/fs-user-stories
-- Releases: https://github.com/gitlares/fs-user-stories/releases
+- Mac App Store: https://apps.apple.com/app/id6801671870
 - License: https://github.com/gitlares/fs-user-stories/blob/main/LICENSE
 
 ## Product facts
@@ -16,4 +16,4 @@ FS User Stories is an open-source, local-first macOS application for writing and
 - Local SQLite persistence; no required account, cloud, telemetry, subscription, sprints, estimates, owners, deadlines, or dashboards.
 - Loopback-only MCP server for compatible local agents.
 - Optional Git sharing through a user-controlled remote and the isolated `fs-user-stories` branch.
-- The current alpha targets Apple Silicon Macs and is signed and notarized.
+- Version 1.0 is available as a one-time purchase on the Mac App Store for $9.99 USD ($199 MXN) and targets Apple Silicon Macs running macOS 26 or later.
