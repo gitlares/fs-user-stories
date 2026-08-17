@@ -33,10 +33,10 @@ int main(int argc, char *argv[])
     }
 
     auto client = std::make_unique<CoreClient>(corePath, QStringList{},
-                                               CoreClient::Mode::Persistent);
-    if (!client->startPersistent()) {
-        qFatal("Failed to start the core process at %s", qUtf8Printable(corePath));
-    }
+                                               CoreClient::Mode::OneShot);
+    // No startup probe: OneShot mode lazily spawns the core on the first
+    // command (controller.load() below). The Swift bridge follows the same
+    // pattern. We rely on the controller error path to surface failures.
 
     WorkspaceController controller;
     controller.setCoreClient(std::move(client), corePath);

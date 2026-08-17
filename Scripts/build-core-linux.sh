@@ -13,7 +13,7 @@ set -eu
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIRECTORY=$(dirname "$SCRIPT_DIRECTORY")
 CORE_DIRECTORY="$PROJECT_DIRECTORY/Core"
-OUTPUT_DIRECTORY="$PROJECT_DIRECTORY/Platform/Linux/Qt/core-bundle"
+OUTPUT_DIRECTORY="$PROJECT_DIRECTORY/Platform/Qt/core-bundle"
 TARGET=${FS_USER_STORIES_TARGET:-x86_64-unknown-linux-gnu}
 
 if ! command -v cargo >/dev/null 2>&1; then

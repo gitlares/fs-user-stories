@@ -355,9 +355,11 @@ void WorkspaceController::setError(const QString &message)
 QVariantMap WorkspaceController::runCommand(const QVariantMap &command)
 {
     if (!m_client) {
-        return {{"ok", false},
-                {"error", {{"code", "no_core"},
-                           {"message", "Core client is not configured."}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "no_core"},
+                {"message", "Core client is not configured."}}}};
     }
     return m_client->execute(command);
 }

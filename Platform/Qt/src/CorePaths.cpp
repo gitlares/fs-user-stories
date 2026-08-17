@@ -11,10 +11,23 @@ namespace fsuserstories {
 
 QString CorePaths::xdgDataHome()
 {
+#if defined(Q_OS_LINUX)
     if (const char *env = std::getenv("XDG_DATA_HOME"); env && *env) {
         return QString::fromLocal8Bit(env);
     }
     return QDir::homePath() + QStringLiteral("/.local/share");
+#elif defined(Q_OS_WIN)
+    // %LOCALAPPDATA%\fs-user-stories  (independent from org/app names).
+    const QString local = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return local.isEmpty() ? QDir::homePath() + QStringLiteral("/AppData/Local") : local;
+#else
+    // macOS / other Unix: use the per-user app-local data directory
+    // (~/Library/Application Support on macOS). This keeps Qt's data co-located
+    // with the rest of the user's macOS app data, mirroring the macOS Swift
+    // build's layout at "FS User Stories/fs-user-stories.sqlite3".
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return base.isEmpty() ? QDir::homePath() + QStringLiteral("/.local/share") : base;
+#endif
 }
 
 QString CorePaths::defaultDatabasePath()
@@ -52,9 +65,13 @@ QString CorePaths::resolveCoreExecutable()
 
     const QList<QString> candidates = {
         exeDir + QLatin1Char('/') + exeName,
+#ifdef Q_OS_WIN
+        exeDir + QStringLiteral("/core/") + exeName,
+#else
         exeDir + QStringLiteral("/../lib/fs-user-stories/core/") + exeName,
         exeDir + QStringLiteral("/../share/fs-user-stories/core/") + exeName,
         exeDir + QStringLiteral("/../../core/") + exeName, // dev layout
+#endif
     };
 
     for (const QString &path : candidates) {

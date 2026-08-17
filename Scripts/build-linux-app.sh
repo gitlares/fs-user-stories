@@ -16,7 +16,7 @@ set -eu
 
 SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIRECTORY=$(dirname "$SCRIPT_DIRECTORY")
-QT_PROJECT="$PROJECT_DIRECTORY/Platform/Linux/Qt"
+QT_PROJECT="$PROJECT_DIRECTORY/Platform/Qt"
 BUILD_DIRECTORY="$QT_PROJECT/build"
 APP_DIR="$BUILD_DIRECTORY/AppDir"
 OUTPUT_DIR="$PROJECT_DIRECTORY/Distribution/Linux"
@@ -55,7 +55,18 @@ cp "$QT_PROJECT/resources/fs-user-stories.desktop" \
 # Use the master icon if available, otherwise fall back to a placeholder.
 if [ -f "$PROJECT_DIRECTORY/Design/AppIcon-master.png" ]; then
     cp "$PROJECT_DIRECTORY/Design/AppIcon-master.png" \
-        "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png"
+       "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png"
+    # Resize to 256x256 if the source has a different resolution (linuxdeploy
+    # rejects icons whose dimensions do not match the directory hint).
+    if command -v convert >/dev/null 2>&1; then
+        convert "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png" \
+                -resize 256x256 \
+                "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png"
+    elif command -v magick >/dev/null 2>&1; then
+        magick "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png" \
+               -resize 256x256 \
+               "$APP_DIR/usr/share/icons/hicolor/256x256/apps/fs-user-stories.png"
+    fi
 fi
 
 # 4. Wrap into an AppImage using linuxdeploy.

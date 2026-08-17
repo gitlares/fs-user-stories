@@ -1,8 +1,8 @@
-# Building FS User Stories on Linux
+# Building FS User Stories on Linux (Qt 6 front-end)
 
 This document covers building the Linux/Qt front-end and the Rust core for
-Linux targets. The Qt GUI is **new** and lives on the `feature/linux-qt`
-branch; the Rust core is shared with the macOS build and lives in `Core/`.
+Linux targets. The Qt GUI is shared across Linux, macOS and Windows and lives
+under `Platform/Qt/`; the Rust core lives in `Core/`.
 
 ## 1. Toolchain
 

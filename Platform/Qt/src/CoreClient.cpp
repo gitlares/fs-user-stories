@@ -2,6 +2,7 @@
 #include "CoreClient.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -147,9 +148,11 @@ QVariantMap CoreClient::execute(const QVariantMap &command)
     if (m_mode == Mode::Persistent) {
         if (!m_process) {
             if (!startPersistent()) {
-                return {{"ok", false},
-                        {"error", {{"code", "core_missing"},
-                                   {"message", "Core process is not running."}}}};
+                return QVariantMap{
+                    {"ok", false},
+                    {"error", QVariantMap{
+                        {"code", "core_missing"},
+                        {"message", "Core process is not running."}}}};
             }
         }
         writeCommand(command);
@@ -163,29 +166,35 @@ QVariantMap CoreClient::execute(const QVariantMap &command)
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start();
     if (!process.waitForStarted(5000)) {
-        return {{"ok", false},
-                {"error", {{"code", "core_failed_to_start"},
-                           {"message", process.errorString()}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "core_failed_to_start"},
+                {"message", process.errorString()}}}};
     }
     process.write(serialise(command));
     process.closeWriteChannel();
     if (!process.waitForFinished(30000)) {
         process.kill();
         process.waitForFinished();
-        return {{"ok", false},
-                {"error", {{"code", "core_timeout"},
-                           {"message", "Core did not finish in time."}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "core_timeout"},
+                {"message", "Core did not finish in time."}}}};
     }
     const QByteArray out = process.readAllStandardOutput();
     const QByteArray err = process.readAllStandardError();
     QJsonParseError parseError;
     const auto doc = QJsonDocument::fromJson(out, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        return {{"ok", false},
-                {"error", {{"code", "invalid_response"},
-                           {"message", QString::fromUtf8(err).isEmpty()
-                                        ? QStringLiteral("Core returned invalid JSON.")
-                                        : QString::fromUtf8(err).trimmed()}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "invalid_response"},
+                {"message", QString::fromUtf8(err).isEmpty()
+                             ? QStringLiteral("Core returned invalid JSON.")
+                             : QString::fromUtf8(err).trimmed()}}}};
     }
     return fromJson(doc.object());
 }
@@ -221,17 +230,21 @@ void CoreClient::writeCommand(const QVariantMap &command)
 QVariantMap CoreClient::readResponse()
 {
     if (!m_process->waitForReadyRead(30000)) {
-        return {{"ok", false},
-                {"error", {{"code", "core_timeout"},
-                           {"message", "Core did not respond in time."}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "core_timeout"},
+                {"message", "Core did not respond in time."}}}};
     }
     const QByteArray data = m_process->readAllStandardOutput();
     QJsonParseError parseError;
     const auto doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        return {{"ok", false},
-                {"error", {{"code", "invalid_response"},
-                           {"message", "Core returned invalid JSON."}}}};
+        return QVariantMap{
+            {"ok", false},
+            {"error", QVariantMap{
+                {"code", "invalid_response"},
+                {"message", "Core returned invalid JSON."}}}};
     }
     return fromJson(doc.object());
 }

@@ -1,0 +1,105 @@
+name: Qt build (Linux / Windows / macOS)
+
+on:
+  push:
+    branches: [qt, main]
+  pull_request:
+    branches: [qt, main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            label: Linux (AppImage)
+            qt_host: linux
+            qt_arch: gcc_64
+            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            rust_target: x86_64-unknown-linux-gnu
+            deployer_script: Scripts/build-linux-app.sh
+            artifact_glob: "Distribution/**/*.AppImage"
+          - os: windows-2022
+            label: Windows (zip)
+            qt_host: windows
+            qt_arch: win64_msvc2019_64
+            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            rust_target: x86_64-pc-windows-msvc
+            deployer_script: Scripts/build-windows-app.ps1
+            artifact_glob: "Distribution/**/*.zip"
+          - os: macos-14
+            label: macOS (zip)
+            qt_host: mac
+            qt_arch: clang_64
+            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            rust_target: x86_64-apple-darwin
+            deployer_script: Scripts/build-macos-app.sh
+            artifact_glob: "Distribution/**/*.zip"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.7.3
+        uses: jurajbelobradic/install-qt-action@v4
+        with:
+          version: "6.7.3"
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          modules: ${{ matrix.qt_modules }}
+          cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          workspaces: "Core -> target"
+          shared-cache-key: ${{ matrix.os }}-cargo-${{ hashFiles('Core/Cargo.lock') }}
+
+      - name: Build Rust core
+        shell: bash
+        run: |
+          cd Core
+          cargo build --release --locked --target ${{ matrix.rust_target }}
+          mkdir -p ../Platform/Qt/core-bundle
+          cp target/${{ matrix.rust_target }}/release/fs-user-stories-core ../Platform/Qt/core-bundle/
+
+      - name: Configure + build Qt (Unix)
+        if: matrix.os != 'windows-2022'
+        shell: bash
+        run: |
+          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build Platform/Qt/build --parallel
+
+      - name: Configure + build Qt (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+                -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+          cmake --build Platform/Qt/build --parallel
+
+      - name: Run platform deployer
+        shell: bash
+        run: ${{ matrix.deployer_script }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fs-user-stories-${{ matrix.os }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: warn
+          retention-days: 14
