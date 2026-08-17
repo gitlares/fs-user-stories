@@ -42,7 +42,7 @@ set(FS_USER_STORIES_SOURCES
 qt_add_executable(FSUserStories ${FS_USER_STORIES_SOURCES})
 
 set_target_properties(FSUserStories PROPERTIES
-    WIN32_EXECUTABLE FALSE
+    WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE FALSE
     OUTPUT_NAME "fs-user-stories"
 )

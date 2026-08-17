@@ -54,8 +54,17 @@ $readme = @"
 FS User Stories — Windows preview build
 
 How to run:
-  1. Extract this zip to a folder with no spaces in the path (e.g. C:\Users\you\fs-user-stories\).
-  2. Double-click fs-user-stories.exe.
+  1. Make sure you have "Microsoft Visual C++ Redistributable 2015-2022 x64"
+     installed. Most Windows machines already do. If you do not, grab it
+     from https://aka.ms/vs/17/release/vc_redist.x64.exe
+  2. Extract this zip to a folder with no spaces in the path
+     (e.g. C:\fs-user-stories\).
+  3. Double-click fs-user-stories.exe.
+
+If nothing happens when you double-click:
+  - Open PowerShell in this folder and run .\fs-user-stories.exe
+    to see the error message.
+  - You might also need the Visual C++ Redistributable (link above).
 
 Data location (first run will create):
   %LOCALAPPDATA%\fs-user-stories\fs-user-stories\
