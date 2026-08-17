@@ -1,0 +1,11 @@
+#!/bin/sh
+# Minimal AppRun for the AppImage. Resolves the location of the bundled core
+# before exec'ing the Qt binary so the AppImage is relocatable.
+set -eu
+HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export FS_USER_STORIES_CORE="$HERE/usr/lib/fs-user-stories/core/fs-user-stories-core"
+export LD_LIBRARY_PATH="$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+export QML2_IMPORT_PATH="$HERE/usr/qml:${QML2_IMPORT_PATH:-}"
+export QT_PLUGIN_PATH="$HERE/usr/plugins:${QT_PLUGIN_PATH:-}"
+export QSG_RENDER_LOOP=threaded
+exec "$HERE/usr/bin/fs-user-stories" "$@"

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=FS User Stories
+GenericName=User Stories
+Comment=Local, offline-first user stories, shared with Git
+Exec=fs-user-stories %f
+Icon=fs-user-stories
+Terminal=false
+Categories=Office;Development;ProjectManagement;
+StartupNotify=true
+StartupWMClass=fs-user-stories
+Keywords=user;stories;product;requirements;git;offline;
+URL=https://gitlares.github.io/fs-user-stories/
