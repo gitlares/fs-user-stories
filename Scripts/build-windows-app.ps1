@@ -39,6 +39,13 @@ New-Item -ItemType Directory -Force -Path $coreOutDir | Out-Null
 Copy-Item -Path $coreExe -Destination (Join-Path $stageDir "fs-user-stories-core.exe")
 Copy-Item -Path $coreExe -Destination (Join-Path $coreOutDir "fs-user-stories-core.exe")
 
+# 2b. Bundle the Material Symbols icon font (loaded at startup by main.cpp
+#     via QFontDatabase::addApplicationFont on applicationDirPath()/resources/fonts/).
+$fontsDir = Join-Path $stageDir "resources/fonts"
+New-Item -ItemType Directory -Force -Path $fontsDir | Out-Null
+Copy-Item -Path (Join-Path $qtSrcDir "resources/fonts/MaterialSymbolsOutlined-Variable.ttf") `
+            -Destination $fontsDir
+
 # 3. Run windeployqt — installs Qt runtime DLLs, QML modules, platform plugins.
 $env:Qt6_DIR = $env:Qt6_DIR
 $windeployqt = Join-Path $env:Qt6_DIR "bin/windeployqt.exe"
