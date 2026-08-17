@@ -28,8 +28,8 @@ int main(int argc, char *argv[])
 
     const QString corePath = CorePaths::resolveCoreExecutable();
     if (corePath.isEmpty()) {
-        qFatal("Could not locate fs-user-stories-core. Set $FS_USER_STORIES_CORE "
-               "or place the binary next to the executable.");
+        qFatal("Could not locate fs-user-stories-core(.exe). Set $FS_USER_STORIES_CORE "
+               "or place it next to fs-user-stories.exe (or in a 'core/' subdirectory).");
     }
 
     auto client = std::make_unique<CoreClient>(corePath, QStringList{},

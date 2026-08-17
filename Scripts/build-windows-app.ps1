@@ -31,9 +31,12 @@ New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 # 1. Copy the binary.
 Copy-Item -Path $exePath -Destination (Join-Path $stageDir "fs-user-stories.exe")
 
-# 2. Bundle the Rust core next to the binary.
+# 2. Bundle the Rust core in BOTH locations — sibling to the executable AND in
+#    the core/ subdirectory — to support both layout conventions used by
+#    CorePaths::resolveCoreExecutable.
 $coreOutDir = Join-Path $stageDir "core"
 New-Item -ItemType Directory -Force -Path $coreOutDir | Out-Null
+Copy-Item -Path $coreExe -Destination (Join-Path $stageDir "fs-user-stories-core.exe")
 Copy-Item -Path $coreExe -Destination (Join-Path $coreOutDir "fs-user-stories-core.exe")
 
 # 3. Run windeployqt — installs Qt runtime DLLs, QML modules, platform plugins.

@@ -61,13 +61,16 @@ QString CorePaths::resolveCoreExecutable()
     }
 
     const QString exeDir = QCoreApplication::applicationDirPath();
+#ifdef Q_OS_WIN
+    const QString exeName = QStringLiteral("fs-user-stories-core.exe");
+#else
     const QString exeName = QStringLiteral("fs-user-stories-core");
+#endif
 
     const QList<QString> candidates = {
         exeDir + QLatin1Char('/') + exeName,
-#ifdef Q_OS_WIN
         exeDir + QStringLiteral("/core/") + exeName,
-#else
+#ifndef Q_OS_WIN
         exeDir + QStringLiteral("/../lib/fs-user-stories/core/") + exeName,
         exeDir + QStringLiteral("/../share/fs-user-stories/core/") + exeName,
         exeDir + QStringLiteral("/../../core/") + exeName, // dev layout
