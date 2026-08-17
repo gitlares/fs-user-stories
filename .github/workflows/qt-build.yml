@@ -47,12 +47,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Qt 6.7.3
-        uses: jurajbelobradic/install-qt-action@v4
+      - name: Install Qt 6.7.3 via aqtinstall
+        uses: cinemast/action-aqt@v1
         with:
-          version: "6.7.3"
           host: ${{ matrix.qt_host }}
-          target: desktop
+          version: '6.7.3'
           arch: ${{ matrix.qt_arch }}
           modules: ${{ matrix.qt_modules }}
           cache: true
@@ -67,7 +66,7 @@ jobs:
         with:
           cache-on-failure: true
           workspaces: "Core -> target"
-          shared-cache-key: ${{ matrix.os }}-cargo-${{ hashFiles('Core/Cargo.lock') }}
+          shared-cache-key: ${{ matrix.os }}-cargo-${{ matrix.rust_target }}-${{ hashFiles('Core/Cargo.lock') }}
 
       - name: Build Rust core
         shell: bash
@@ -75,21 +74,33 @@ jobs:
           cd Core
           cargo build --release --locked --target ${{ matrix.rust_target }}
           mkdir -p ../Platform/Qt/core-bundle
-          cp target/${{ matrix.rust_target }}/release/fs-user-stories-core ../Platform/Qt/core-bundle/
+          cp target/${{ matrix.rust_target }}/release/fs-user-stories-core* ../Platform/Qt/core-bundle/
 
       - name: Configure + build Qt (Unix)
         if: matrix.os != 'windows-2022'
         shell: bash
         run: |
-          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          QT_PREFIX="$(dirname $(dirname $(find /root /home -path '*Qt/6*' -name 'qmake' 2>/dev/null | head -1) 2>/dev/null) 2>/dev/null)"
+          if [ -z "$QT_PREFIX" ]; then
+            QT_PREFIX=$(dirname $(dirname $(find ~/hostedtoolcache -maxdepth 4 -name 'qmake' 2>/dev/null | head -1) 2>/dev/null) 2>/dev/null)
+          fi
+          if [ -z "$QT_PREFIX" ]; then
+            QT_PREFIX=$(dirname $(dirname $(find / -maxdepth 6 -name 'qmake6' 2>/dev/null | head -1) 2>/dev/null) 2>/dev/null)
+          fi
+          echo "QT_PREFIX=$QT_PREFIX"
+          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_PREFIX_PATH="$QT_PREFIX"
           cmake --build Platform/Qt/build --parallel
 
       - name: Configure + build Qt (Windows)
         if: matrix.os == 'windows-2022'
         shell: pwsh
         run: |
+          $qmake = Get-ChildItem -Path $env:Qt6_DIR -Filter 'qmake*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          $qtPrefix = Split-Path -Parent (Split-Path -Parent $qmake.FullName)
+          Write-Host "QT_PREFIX=$qtPrefix"
           cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-                -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+                -DCMAKE_PREFIX_PATH="$qtPrefix"
           cmake --build Platform/Qt/build --parallel
 
       - name: Run platform deployer
