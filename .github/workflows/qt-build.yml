@@ -33,40 +33,45 @@ jobs:
           aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 \
             -O "$GITHUB_WORKSPACE/qt"
           echo "Qt6_DIR=$GITHUB_WORKSPACE/qt/6.7.3/msvc2019_64" >> "$GITHUB_ENV"
-          echo "--- bin contents ---"
-          ls "$GITHUB_WORKSPACE/qt/6.7.3/msvc2019_64/bin/windeployqt.exe"
 
       - name: Install Rust toolchain (MSVC)
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Add MSVC + Windows SDK to PATH
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          workspaces: "Core -> target"
-          shared-cache-key: windows-cargo-${{ hashFiles('Core/Cargo.lock') }}
-
-      - name: Build Rust core
-        shell: bash
-        run: |
-          cd Core
-          cargo build --release --locked --target x86_64-pc-windows-msvc
-          mkdir -p ../Platform/Qt/core-bundle
-          cp target/x86_64-pc-windows-msvc/release/fs-user-stories-core.exe ../Platform/Qt/core-bundle/
-
-      - name: Configure + build Qt
+      - name: Locate Visual Studio
+        id: vs
         shell: pwsh
         run: |
-          cmake -S Platform/Qt -B Platform/Qt/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-                -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
-          cmake --build Platform/Qt/build --parallel
+          $candidates = @(
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
+            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
+            "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+          )
+          foreach ($p in $candidates) { if (Test-Path $p) { Write-Host "::set-output name=vcvars::$p"; exit 0 } }
+          Write-Error "vcvars64.bat not found"
+          exit 1
+
+      - name: Build Rust core (MSVC env)
+        shell: cmd
+        run: |
+          call "${{ steps.vs.outputs.vcvars }}"
+          cd /d "%GITHUB_WORKSPACE%\Core"
+          cargo build --release --locked --target x86_64-pc-windows-msvc
+          if errorlevel 1 exit /b 1
+          if not exist "..\Platform\Qt\core-bundle" mkdir "..\Platform\Qt\core-bundle"
+          copy /Y "target\x86_64-pc-windows-msvc\release\fs-user-stories-core.exe" "..\Platform\Qt\core-bundle\"
+          dir "..\Platform\Qt\core-bundle"
+
+      - name: Configure + build Qt
+        shell: cmd
+        run: |
+          call "${{ steps.vs.outputs.vcvars }}"
+          cmake -S Platform\Qt -B Platform\Qt\build -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+                -DCMAKE_PREFIX_PATH="%Qt6_DIR%"
+          if errorlevel 1 exit /b 1
+          cmake --build Platform\Qt\build --parallel
+          if errorlevel 1 exit /b 1
 
       - name: Bundle + zip
         shell: pwsh
