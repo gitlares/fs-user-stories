@@ -130,19 +130,7 @@ Compress-Archive -Path $stageDir -DestinationPath $zipPath -CompressionLevel Opt
 Write-Host "==> Created $zipPath"
 Get-Item $zipPath | Select-Object FullName, Length
 
-# 6. Optional: build the single-file NSIS installer (FSUserStoriesSetup-*.exe).
-#    Skipped silently if NSIS is not installed (e.g. on a developer machine).
-$makensis = Get-Command makensis -ErrorAction SilentlyContinue
-if ($makensis) {
-    Write-Host "==> Building NSIS installer from Scripts/installer.nsi"
-    $nsi = Join-Path $projectRoot "Scripts/installer.nsi"
-    Push-Location $projectRoot
-    try {
-        & $makensis.Source $nsi
-        if ($LASTEXITCODE -ne 0) { Write-Warning "makensis reported exit $LASTEXITCODE" }
-    } finally {
-        Pop-Location
-    }
-} else {
-    Write-Host "==> makensis not on PATH; skipping NSIS installer. (Install NSIS to enable.)"
-}
+# 6. NSIS installer — disabled until the path resolution above is fixed.
+#    The zip Distribution/Windows/fs-user-stories-windows.zip is the primary
+#    distributable for now. Re-enable after installers are reliable.
+Write-Host "==> Skipping NSIS installer (zipped bundle is the deliverable)."
