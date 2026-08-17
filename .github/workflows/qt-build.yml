@@ -23,7 +23,7 @@ jobs:
             qt_host: linux
             qt_target: desktop
             qt_arch: gcc_64
-            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            qt_modules: "qtquickcontrols2,qtsvg"
             rust_target: x86_64-unknown-linux-gnu
             build_cmd: Scripts/build-linux-app.sh
             artifact_glob: "Distribution/**/*.AppImage"
@@ -32,7 +32,7 @@ jobs:
             qt_host: windows
             qt_target: desktop
             qt_arch: win64_msvc2019_64
-            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            qt_modules: "qtquickcontrols2,qtsvg"
             rust_target: x86_64-pc-windows-msvc
             build_cmd: Scripts/build-windows-app.ps1
             artifact_glob: "Distribution/**/*.zip"
@@ -41,7 +41,7 @@ jobs:
             qt_host: mac
             qt_target: desktop
             qt_arch: clang_64
-            qt_modules: "qt5compat qml qtquick qtquickcontrols2 qtsvg"
+            qt_modules: "qtquickcontrols2,qtsvg"
             rust_target: x86_64-apple-darwin
             build_cmd: Scripts/build-macos-app.sh
             artifact_glob: "Distribution/**/*.zip"
@@ -50,7 +50,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python + aqtinstall
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -59,9 +59,11 @@ jobs:
         shell: bash
         run: |
           python -m pip install --quiet --upgrade aqtinstall
-          aqt install-qt ${{ matrix.qt_host }} ${{ matrix.qt_target }} 6.7.3 ${{ matrix.qt_arch }} \
-            -O ./qt -m ${{ matrix.qt_modules }}
-          echo "Qt6_DIR=$(pwd)/qt/6.7.3/${{ matrix.qt_arch }}" >> $GITHUB_ENV
+          # `qml`, `qtquick`, `qt5compat` ship with the base install. We only
+          # ask aqt for the add-on modules we actually need.
+          aqt install-qt "${{ matrix.qt_host }}" "${{ matrix.qt_target }}" "6.7.3" "${{ matrix.qt_arch }}" \
+            -O ./qt -m "${{ matrix.qt_modules }}"
+          echo "Qt6_DIR=$(pwd)/qt/6.7.3/${{ matrix.qt_arch }}" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
