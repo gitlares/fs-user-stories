@@ -34,9 +34,15 @@ ApplicationWindow {
 
     Component.onCompleted: {
         // Trigger initial workspace load, then auto-open the last project
-        // (or the first one if no preference has been recorded).
+        // (or the first one if no preference has been recorded). We listen
+        // for the projectsChanged signal so we can open a project once the
+        // list is actually populated (not on a stale, empty read).
         workspace.load()
-        if (workspace.projects.length > 0) {
+    }
+    Connections {
+        target: workspace
+        function onProjectsChanged() {
+            if (workspace.projects.length === 0) return
             var target = settings.lastProjectId
             var match = ""
             for (var i = 0; i < workspace.projects.length; i++) {
