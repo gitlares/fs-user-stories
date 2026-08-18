@@ -12,6 +12,7 @@ Item {
     component IconLabel: Label {
         font.family: appIconFont
         font.pixelSize: 16
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -28,28 +29,30 @@ Item {
             // Rounded icon tile (matches mac "text.badge.plus" 64x64 tile).
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                width: 64; height: 64; radius: 18
+                width: 72; height: 72; radius: 20
                 color: Qt.rgba(0.34, 0.40, 0.95, 0.10)   // accent-tinted background
                 IconLabel {
                     anchors.centerIn: parent
                     text: "note_add"
-                    font.pixelSize: 30
+                    font.pixelSize: 36
+                    font.weight: Font.Bold
                     color: "#4f56d2"
                 }
             }
 
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 8
+                spacing: 10
                 Label {
                     text: qsTr("Start with a project")
-                    font.pixelSize: 22
-                    font.weight: Font.DemiBold
+                    font.pixelSize: 26
+                    font.weight: Font.Bold
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Label {
                     text: qsTr("Create a focused space for your actors and user stories.")
-                    font.pixelSize: 13
+                    font.pixelSize: 14
+                    font.weight: Font.Medium
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     Layout.alignment: Qt.AlignHCenter
@@ -61,25 +64,31 @@ Item {
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: 10
 
                 Button {
                     text: qsTr("Create Project")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: 40
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
                     highlighted: true
                     onClicked: root.openCreateProject()
                 }
                 Button {
                     text: qsTr("Use an Invitation")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: 40
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
                     onClicked: root.openJoinShared()
                 }
                 Button {
                     text: qsTr("Connect Existing Repository")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: 40
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
                     onClicked: root.openJoinShared()
                 }
             }

@@ -9,6 +9,7 @@ Item {
     component IconLabel: Label {
         font.family: appIconFont
         font.pixelSize: 14
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -33,17 +34,18 @@ Item {
                 // Projects header
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: 40
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
                         anchors.rightMargin: 12
                         Label {
                             text: qsTr("Projects")
-                            font.weight: Font.DemiBold
-                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                            font.pixelSize: 12
                             opacity: 0.55
                             Layout.fillWidth: true
+                            renderType: Text.NativeRendering
                         }
                     }
                 }
@@ -75,8 +77,8 @@ Item {
                                 Label {
                                     Layout.fillWidth: true
                                     text: modelData.name
-                                    font.pixelSize: 13
-                                    font.weight: modelData.id === workspace.currentProjectId ? Font.DemiBold : Font.Normal
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
                                     elide: Label.ElideRight
                                 }
                                 RowLayout {
@@ -93,7 +95,7 @@ Item {
                                             }
                                             return done + "/" + total
                                         }
-                                        font.pixelSize: 11; opacity: 0.55
+                                        font.pixelSize: 11; opacity: 0.5
                                         Layout.fillWidth: true
                                     }
                                     // progress dots
@@ -112,7 +114,9 @@ Item {
                                                 dots += (j < done ? "●" : "○") + " "
                                             return dots
                                         }
-                                        font.pixelSize: 9; opacity: 0.6
+                                        font.pixelSize: 11
+                                        font.weight: Font.Bold
+                                        opacity: 0.7
                                         Layout.rightMargin: 12
                                     }
                                 }
@@ -134,17 +138,17 @@ Item {
                     Layout.margins: 12
                     spacing: 4
                     RowLayout {
-                        spacing: 7
-                        Rectangle { width: 8; height: 8; radius: 4; color: "#22c55e" }
+                        spacing: 8
+                        Rectangle { width: 9; height: 9; radius: 5; color: "#22c55e" }
                         Label {
                             text: qsTr("MCP Active")
-                            font.pixelSize: 12; font.weight: Font.DemiBold
+                            font.pixelSize: 13; font.weight: Font.Bold
                             Layout.fillWidth: true
                         }
                     }
                     Label {
                         Layout.fillWidth: true
-                        Layout.leftMargin: 16
+                        Layout.leftMargin: 17
                         text: "http://127.0.0.1:49231/mcp"
                         font.family: "monospace"
                         font.pixelSize: 10
@@ -159,12 +163,18 @@ Item {
                     text: qsTr("New Project")
                     Layout.fillWidth: true
                     Layout.leftMargin: 14; Layout.rightMargin: 14
-                    Layout.topMargin: 12
+                    Layout.topMargin: 14
                     flat: true
                     contentItem: RowLayout {
                         spacing: 10
-                        IconLabel { text: "add" }
-                        Label { text: qsTr("New Project"); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft }
+                        IconLabel { text: "add"; font.pixelSize: 18 }
+                        Label {
+                            text: qsTr("New Project")
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                        }
                     }
                     onClicked: welcome.openCreateProject()
                 }
@@ -172,15 +182,21 @@ Item {
                     text: qsTr("Join Shared Project")
                     Layout.fillWidth: true
                     Layout.leftMargin: 14; Layout.rightMargin: 14
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 12
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 14
                     flat: true
-                    onClicked: welcome.openJoinShared()
                     contentItem: RowLayout {
                         spacing: 10
-                        IconLabel { text: "person_add" }
-                        Label { text: qsTr("Join Shared Project"); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft }
+                        IconLabel { text: "person_add"; font.pixelSize: 18 }
+                        Label {
+                            text: qsTr("Join Shared Project")
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                        }
                     }
+                    onClicked: welcome.openJoinShared()
                 }
             }
         }

@@ -15,11 +15,14 @@ ApplicationWindow {
     visible: true
     color: palette.window
 
-    // Reusable icon label style — Material Symbols ligature + thin font weight.
+    // Reusable icon label style — Material Symbols Outlined (variable font,
+    // weight axis 100-700). We pick 500 ("Demibold") because macs SF Symbols
+    // default look heavier than weight 100. PixelSize matches the mac toolbar
+    // icon size at the 1100x720 default window.
     component IconLabel: Label {
         font.family: appIconFont
         font.pixelSize: 16
-        font.weight: Font.Normal
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -72,8 +75,8 @@ ApplicationWindow {
                     }
                     return qsTr("FS User Stories")
                 }
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
+                font.pixelSize: 14
+                font.weight: Font.Bold
                 elide: Label.ElideRight
             }
 

@@ -20,12 +20,14 @@ Item {
     component IconLabel: Label {
         font.family: appIconFont
         font.pixelSize: 14
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
     component BigIconLabel: Label {
         font.family: appIconFont
-        font.pixelSize: 16
+        font.pixelSize: 18
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -43,13 +45,13 @@ Item {
 
             // Status badge pill
             Rectangle {
-                radius: 10
+                radius: 12
                 color: {
                     if (storyStatus === "done" || storyStatus === "completed") return "#dcfce7"
                     if (storyStatus === "active") return "#dbeafe"
                     return "#f3f4f6"
                 }
-                Layout.preferredHeight: 22
+                Layout.preferredHeight: 24
                 Layout.preferredWidth: badgeText.implicitWidth + 28
                 RowLayout {
                     anchors.centerIn: parent
@@ -60,6 +62,7 @@ Item {
                               : storyStatus === "active"
                                 ? "play_circle"
                                 : "edit_note"
+                        font.pixelSize: 14
                         color: storyStatus === "done" || storyStatus === "completed" ? "#15803d"
                               : storyStatus === "active" ? "#1d4ed8"
                               : "#525252"
@@ -67,8 +70,8 @@ Item {
                     Label {
                         id: badgeText
                         text: storyStatus.charAt(0).toUpperCase() + storyStatus.slice(1)
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
+                        font.pixelSize: 12
+                        font.weight: Font.Bold
                         color: storyStatus === "done" || storyStatus === "completed" ? "#15803d"
                               : storyStatus === "active" ? "#1d4ed8"
                               : "#525252"
@@ -122,8 +125,8 @@ Item {
         Label {
             visible: storyId !== ""
             text: storyTitle
-            font.pixelSize: 28
-            font.weight: Font.DemiBold
+            font.pixelSize: 32
+            font.weight: Font.Bold
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
         }

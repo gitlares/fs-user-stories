@@ -10,6 +10,7 @@ Item {
     component IconLabel: Label {
         font.family: appIconFont
         font.pixelSize: 16
+        font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -28,10 +29,10 @@ Item {
                 spacing: 8
 
                 Rectangle {
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 250
+                    Layout.preferredHeight: 32
                     Layout.alignment: Qt.AlignHCenter
-                    radius: 14
+                    radius: 16
                     color: Qt.rgba(0, 0, 0, 0.04)
 
                     RowLayout {
@@ -49,18 +50,18 @@ Item {
                                 visible: true
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 12
+                                    radius: 14
                                     color: modelData.active ? palette.base : "transparent"
                                     border.color: modelData.active ? palette.mid : "transparent"
                                     border.width: 0.5
                                 }
                                 RowLayout {
                                     anchors.centerIn: parent
-                                    spacing: 4
-                                    IconLabel { text: modelData.icon; font.pixelSize: 14; opacity: 0.8 }
+                                    spacing: 6
+                                    IconLabel { text: modelData.icon; font.pixelSize: 15; opacity: 0.8 }
                                     Label {
                                         text: modelData.label
-                                        font.pixelSize: 12
+                                        font.pixelSize: 13
                                         font.weight: modelData.active ? Font.DemiBold : Font.Normal
                                     }
                                 }
@@ -74,22 +75,22 @@ Item {
 
                 // Search field
                 Rectangle {
-                    Layout.preferredWidth: 200
-                    Layout.preferredHeight: 28
-                    radius: 6
+                    Layout.preferredWidth: 220
+                    Layout.preferredHeight: 32
+                    radius: 8
                     color: Qt.rgba(0, 0, 0, 0.04)
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 4
-                        spacing: 4
-                        IconLabel { text: "search"; font.pixelSize: 14; opacity: 0.55 }
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        spacing: 6
+                        IconLabel { text: "search"; font.pixelSize: 15; opacity: 0.55 }
                         TextField {
                             id: searchField
                             Layout.fillWidth: true
                             background: null
                             placeholderText: qsTr("Search stories")
-                            font.pixelSize: 12
+                            font.pixelSize: 13
                             onTextChanged: workspace.searchCurrent(text)
                         }
                     }
@@ -100,7 +101,7 @@ Item {
         // Story count header (large)
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
+            Layout.preferredHeight: 60
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 16
@@ -108,12 +109,14 @@ Item {
                 spacing: 8
                 Label {
                     text: qsTr("Stories")
-                    font.pixelSize: 22; font.weight: Font.DemiBold
+                    font.pixelSize: 26
+                    font.weight: Font.Bold
                     Layout.fillWidth: true
                 }
                 Label {
                     text: workspace.currentStoryModel ? workspace.currentStoryModel.count : 0
-                    font.pixelSize: 22; opacity: 0.5
+                    font.pixelSize: 26
+                    opacity: 0.4
                 }
             }
         }
@@ -153,13 +156,13 @@ Item {
             clip: true
             delegate: ItemDelegate {
                 width: ListView.view ? ListView.view.width : 0
-                height: 38
+                height: 40
                 contentItem: RowLayout {
                     spacing: 8
                     anchors.margins: 0
                     Rectangle {
-                        width: 8; height: 8; radius: 4
-                        Layout.leftMargin: 16
+                        width: 9; height: 9; radius: 4
+                        Layout.leftMargin: 18
                         color: {
                             if (status === "done" || status === "completed") return "#22c55e"
                             if (status === "active") return "#3b82f6"
@@ -169,13 +172,15 @@ Item {
                     Label {
                         text: title
                         Layout.fillWidth: true
-                        Layout.leftMargin: 6
+                        Layout.leftMargin: 8
                         elide: Label.ElideRight
                         font.pixelSize: 13
+                        font.weight: Font.Medium
                     }
                     Label {
                         text: status
-                        font.pixelSize: 10; opacity: 0.5
+                        font.pixelSize: 11
+                        opacity: 0.5
                         Layout.rightMargin: 12
                     }
                 }
