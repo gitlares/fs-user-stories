@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://gitlares.github.io/fs-user-stories/">Website</a> ·
-  <a href="https://github.com/gitlares/fs-user-stories/releases">Download</a> ·
+  <a href="https://apps.apple.com/app/id6801671870">Mac App Store</a> ·
   <a href="https://www.paypal.com/donate/?hosted_button_id=7RDCBR3QXXEMJ">♥ Support</a> ·
   <a href="https://github.com/gitlares/fs-user-stories/issues">Issues</a> ·
   <a href="./LICENSE">MIT License</a>
@@ -22,6 +22,8 @@ FS User Stories is a native, local-first macOS application for writing clear
 requirements without turning them into a project-management system. It keeps the
 product deliberately small: projects, profiles, stories, acceptance criteria,
 one notes field, and attachments.
+
+![FS User Stories showing a product launch story, progress, and acceptance criteria](docs/assets/fs-user-stories-demo-detail.png)
 
 ## Why this exists
 
