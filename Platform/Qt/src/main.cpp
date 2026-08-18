@@ -87,15 +87,18 @@ int main(int argc, char *argv[])
         app.setPalette(mac);
     }
 
-    // Default font for the app: SF Pro Text on mac, Segoe UI on Windows, the
-    // platform default elsewhere. The exact SF Pro metrics make a noticeable
-    // visual difference on macOS, while Segoe UI Variable matches what most
-    // testers expect on Windows.
+    // Default font for the app. We deliberately do NOT set a specific family
+    // on macOS (Apple's SF Pro is proprietary and not redistributable).
+    // Instead we let the OS pick its native UI font:
+    //   * macOS: system default (SF Pro / system-ui, owned by the user)
+    //   * Windows: Segoe UI Variable (substitutable via QFontDatabase)
+    //   * Linux: distribution default (Ubuntu, Cantarell, ...)
+    // We only set the family on Windows where Segoe UI Variable is bundled
+    // with the OS and gives a clean macOS-like variable look.
     {
         QFont uiFont = app.font();
-#ifdef Q_OS_MACOS
-        uiFont.setFamily(QStringLiteral("SF Pro Text"));
-#elif defined(Q_OS_WIN)
+        uiFont.setStyleHint(QFont::SansSerif);
+#ifdef Q_OS_WIN
         uiFont.setFamily(QStringLiteral("Segoe UI Variable"));
 #endif
 #ifdef Q_OS_LINUX
