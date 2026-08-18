@@ -26,17 +26,21 @@ Item {
             spacing: 22
             width: 380
 
-            // Rounded icon tile (matches mac "text.badge.plus" 64x64 tile).
+            // Rounded icon tile (macOS-style: large rounded square with gradient).
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                width: 72; height: 72; radius: 20
-                color: Qt.rgba(0.34, 0.40, 0.95, 0.10)   // accent-tinted background
+                width: 80; height: 80; radius: 22
+                gradient: Gradient {
+                    orientation: Gradient.Vertical
+                    GradientStop { position: 0.0; color: "#dde6ff" }
+                    GradientStop { position: 1.0; color: "#c5d4ff" }
+                }
                 IconLabel {
                     anchors.centerIn: parent
                     text: "note_add"
-                    font.pixelSize: 36
+                    font.pixelSize: 40
                     font.weight: Font.Bold
-                    color: "#4f56d2"
+                    color: "#0a52cc"
                 }
             }
 
@@ -64,31 +68,55 @@ Item {
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 8
 
                 Button {
                     text: qsTr("Create Project")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 38
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
-                    highlighted: true
+                    contentItem: Label {
+                        text: parent.text
+                        color: "white"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 8
+                        color: parent.down ? "#006edc" : "#0a84ff"
+                        border.width: 0
+                    }
                     onClicked: root.openCreateProject()
                 }
                 Button {
                     text: qsTr("Use an Invitation")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 38
                     font.pixelSize: 13
                     font.weight: Font.Medium
+                    background: Rectangle {
+                        radius: 8
+                        color: parent.down ? "#e5e5ea" : "#f5f5f7"
+                        border.color: "#d1d1d6"
+                        border.width: 1
+                    }
                     onClicked: root.openJoinShared()
                 }
                 Button {
                     text: qsTr("Connect Existing Repository")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 38
                     font.pixelSize: 13
                     font.weight: Font.Medium
+                    background: Rectangle {
+                        radius: 8
+                        color: parent.down ? "#e5e5ea" : "#f5f5f7"
+                        border.color: "#d1d1d6"
+                        border.width: 1
+                    }
                     onClicked: root.openJoinShared()
                 }
             }

@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QPalette>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QIcon>
@@ -58,6 +59,50 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("fs-user-stories")));
+
+    // macOS-flavoured palette. Even on Windows/Linux the app reads closer to
+    // the macOS reference screenshot. macOS-style colours:
+    //   * Window / Base: very light grey/white (#f5f5f7 / #ffffff)
+    //   * Text: near-black (#1d1d1f)
+    //   * Highlight: Apple blue (#0a84ff, the macOS 11+ accent)
+    //   * HighlightedText: white
+    //   * Mid (dividers, borders): #d1d1d6
+    {
+        QPalette mac;
+        mac.setColor(QPalette::Window,        QColor(0xf5, 0xf5, 0xf7));
+        mac.setColor(QPalette::WindowText,    QColor(0x1d, 0x1d, 0x1f));
+        mac.setColor(QPalette::Base,          QColor(0xff, 0xff, 0xff));
+        mac.setColor(QPalette::AlternateBase, QColor(0xf5, 0xf5, 0xf7));
+        mac.setColor(QPalette::ToolTipBase,    QColor(0xff, 0xff, 0xff));
+        mac.setColor(QPalette::ToolTipText,    QColor(0x1d, 0x1d, 0x1f));
+        mac.setColor(QPalette::Text,           QColor(0x1d, 0x1d, 0x1f));
+        mac.setColor(QPalette::Button,        QColor(0xff, 0xff, 0xff));
+        mac.setColor(QPalette::ButtonText,    QColor(0x1d, 0x1d, 0x1f));
+        mac.setColor(QPalette::Highlight,      QColor(0x0a, 0x84, 0xff));
+        mac.setColor(QPalette::HighlightedText,QColor(0xff, 0xff, 0xff));
+        mac.setColor(QPalette::Mid,           QColor(0xd1, 0xd1, 0xd6));
+        mac.setColor(QPalette::Light,         QColor(0xf5, 0xf5, 0xf7));
+        mac.setColor(QPalette::Dark,          QColor(0x6e, 0x6e, 0x73));
+        mac.setColor(QPalette::PlaceholderText,QColor(0xa1, 0xa1, 0xa6));
+        app.setPalette(mac);
+    }
+
+    // Default font for the app: SF Pro Text on mac, Segoe UI on Windows, the
+    // platform default elsewhere. The exact SF Pro metrics make a noticeable
+    // visual difference on macOS, while Segoe UI Variable matches what most
+    // testers expect on Windows.
+    {
+        QFont uiFont = app.font();
+#ifdef Q_OS_MACOS
+        uiFont.setFamily(QStringLiteral("SF Pro Text"));
+#elif defined(Q_OS_WIN)
+        uiFont.setFamily(QStringLiteral("Segoe UI Variable"));
+#endif
+#ifdef Q_OS_LINUX
+        uiFont.setPointSize(10);
+#endif
+        app.setFont(uiFont);
+    }
 
     // Load Material Symbols Outlined (OFL-licensed, OFL file bundled at
     // <bindir>/resources/fonts/MaterialSymbolsOutlined-Variable.woff2 by the
