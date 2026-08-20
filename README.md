@@ -18,10 +18,11 @@
   <a href="./LICENSE">MIT License</a>
 </p>
 
-FS User Stories is a native, local-first macOS application for writing clear
-requirements without turning them into a project-management system. It keeps the
-product deliberately small: projects, profiles, stories, acceptance criteria,
-one notes field, and attachments.
+FS User Stories is a local-first application for writing clear requirements
+without turning them into a project-management system. The native macOS app and
+the Qt app for Windows and Linux share the same Rust core and project format. It
+keeps the product deliberately small: projects, profiles, stories, acceptance
+criteria, one notes field, and attachments.
 
 ![FS User Stories showing a product launch story, progress, and acceptance criteria](docs/assets/fs-user-stories-demo-detail.png)
 
@@ -171,37 +172,28 @@ although a dedicated repository remains the clearest choice for a team.
 
 ## Install
 
-Alpha 7 currently requires an Apple Silicon Mac running macOS 26 or later.
+The end-user macOS edition is distributed through the
+[Mac App Store](https://apps.apple.com/app/id6801671870). Windows and Linux are
+currently source-build targets; their installers and AppImages are deliberately
+not committed to this repository or published as releases yet.
 
-1. Download the DMG from [GitHub Releases](https://github.com/gitlares/fs-user-stories/releases).
-2. Open the DMG and drag **FS User Stories** to **Applications**.
-3. Open the application normally.
-
-The published DMG and application are Developer ID signed, notarized by Apple,
-and stapled for Gatekeeper. End users do not need Xcode, Rust, CMake, Git,
-Homebrew, or libgit2 installed.
-
-This is an alpha intended for team testing. Back up important project data and
-[report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
+This is still an alpha intended for team testing. Back up important project data
+and [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
 
 ## Road to Version 1
 
-**Alpha 7 is an early macOS release for real-world testing with small teams.**
-It is the place to validate the local-first workflow, Git sharing, and local MCP
-before the first stable release.
+The current alpha validates the local-first workflow, Git sharing, and local MCP
+across the shared Rust core and the platform interfaces.
 
 **Version 1 is planned as the public product release:**
 
 - A polished macOS edition distributed through the Mac App Store.
-- Native Linux and Windows editions built on the same open portable core and
+- Native Linux and Windows editions built from the same open portable core and
   local project format.
-- Continued support for the signed direct macOS download for people who prefer
-  an independent, open-source distribution.
 
 The product promise does not change across platforms: local data, no FS User
 Stories accounts, no mandatory cloud, optional Git sharing, and a local MCP
-server for the agent the user chooses. The current alpha supports macOS only;
-Linux and Windows are Version 1 targets, not alpha features.
+server for the agent the user chooses.
 
 ### Test with two Macs
 
@@ -264,9 +256,61 @@ user interface remains fully native to macOS.
 
 ## Build from source
 
-The alpha currently supports only Apple Silicon Macs (M1 or newer) running
-macOS 26 or later. Building locally does not require an Apple Developer account,
-signing certificate, GitHub token, or FS User Stories account.
+Source builds are available for macOS, Windows x64, and Linux x64. They do not
+need an Apple Developer account, GitHub token, or FS User Stories account. The
+repository contains source and build scripts only: no Windows, Linux, or macOS
+binary is published from this repository.
+
+### macOS (Apple Silicon)
+
+Requires macOS 26 or later, Xcode 26 or newer, Rust 1.97 or newer, CMake, and
+Git. After installing those tools, build with:
+
+```sh
+./Scripts/build-and-run-local.sh --no-open
+```
+
+Use `./Scripts/build-and-run-local.sh --test` to run the macOS and Rust tests.
+
+### Linux x64
+
+On Ubuntu/Debian, install the build prerequisites once:
+
+```sh
+sudo apt install build-essential cmake ninja-build pkg-config git \
+  qt6-base-dev qt6-declarative-dev qt6-tools-dev libsecret-1-dev
+rustup toolchain install stable
+```
+
+Then create a local AppImage with one command:
+
+```sh
+./Scripts/build-linux-app.sh
+```
+
+The script builds the Rust core and Qt app. It requires `linuxdeploy` and its
+Qt plugin only for the final AppImage wrapper; see `docs/qt-build-linux.md` for
+their installation. For an unwrapped local executable, run
+`./Scripts/build-core-linux.sh`, then CMake against `Platform/Qt`.
+
+### Windows x64
+
+Install once: Visual Studio 2022 Build Tools with **Desktop development with
+C++**, Rust, CMake, Ninja, NSIS, and Qt 6.7.3 `msvc2019_64`. Then, from PowerShell:
+
+```powershell
+.\Scripts\build-windows-local.ps1
+```
+
+If Qt is not in CMake's search path, set its kit directory first:
+
+```powershell
+$env:FS_USER_STORIES_QT_ROOT = 'C:\Qt\6.7.3\msvc2019_64'
+.\Scripts\build-windows-local.ps1
+```
+
+This creates a local x64 installer under `Distribution\Windows`. Use
+`-SkipInstaller` to compile only the app.
 
 ### Requirements
 
