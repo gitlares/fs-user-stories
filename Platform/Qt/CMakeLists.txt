@@ -73,10 +73,18 @@ qt_add_qml_module(FSUserStories
         src/qml/StoryList.qml
         src/qml/StoryDetailView.qml
         src/qml/ProjectProfilesView.qml
+        src/qml/ProfileDetailView.qml
         src/qml/GitSyncView.qml
+        src/qml/Theme.qml
+        src/qml/MacButton.qml
+        src/qml/MacIconButton.qml
+        src/qml/MacTextField.qml
+        src/qml/MacComboBox.qml
+        src/qml/MacProgressBar.qml
     RESOURCES
         resources/fs-user-stories.desktop
         resources/fonts/MaterialSymbolsOutlined-Variable.ttf
+        resources/fonts/InterVariable.ttf
 )
 
 target_link_libraries(FSUserStories PRIVATE
@@ -99,6 +107,9 @@ add_custom_command(TARGET FSUserStories POST_BUILD
             "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/MaterialSymbolsOutlined-Variable.ttf"
+            "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/InterVariable.ttf"
             "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts/"
 )
 

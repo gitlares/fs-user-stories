@@ -5,6 +5,8 @@
 #include <QQmlContext>
 #include <QPalette>
 #include <QQuickStyle>
+#include <QQuickWindow>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QIcon>
 #include <QFontDatabase>
@@ -14,6 +16,7 @@
 #include <QLoggingCategory>
 #include <QTextStream>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include "AppInfo.h"
 #include "CoreClient.h"
@@ -124,28 +127,8 @@ int main(int argc, char *argv[])
         app.setPalette(mac);
     }
 
-    // Default font for the app. We deliberately do NOT set a specific family
-    // on macOS (Apple's SF Pro is proprietary and not redistributable).
-    // Instead we let the OS pick its native UI font:
-    //   * macOS: system default (SF Pro / system-ui, owned by the user)
-    //   * Windows: Segoe UI Variable (substitutable via QFontDatabase)
-    //   * Linux: distribution default (Ubuntu, Cantarell, ...)
-    // We only set the family on Windows where Segoe UI Variable is bundled
-    // with the OS and gives a clean macOS-like variable look.
-    {
-        QFont uiFont = app.font();
-        uiFont.setStyleHint(QFont::SansSerif);
-#ifdef Q_OS_WIN
-        uiFont.setFamily(QStringLiteral("Segoe UI Variable"));
-#endif
-#ifdef Q_OS_LINUX
-        uiFont.setPointSize(10);
-#endif
-        app.setFont(uiFont);
-    }
-
-    // Load Material Symbols Outlined (OFL-licensed, OFL file bundled at
-    // <bindir>/resources/fonts/MaterialSymbolsOutlined-Variable.woff2 by the
+    // Load Material Symbols Outlined (Apache-licensed, bundled at
+    // <bindir>/resources/fonts/MaterialSymbolsOutlined-Variable.ttf by the
     // POST_BUILD step in CMakeLists). Returns the family name to use in QML.
     QString iconFontFamily = QStringLiteral("Material Symbols Outlined");
     const QString fontPath =
@@ -161,16 +144,28 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Default font for the app: system default body, sized for the platform.
+    // Inter is SIL OFL 1.1 and gives Windows and Linux the same metrics. We do
+    // not bundle or depend on Apple's proprietary SF Pro/SF Symbols assets.
+    QString uiFontFamily = QStringLiteral("sans-serif");
+    const QString uiFontPath =
+        QCoreApplication::applicationDirPath() +
+        QStringLiteral("/resources/fonts/InterVariable.ttf");
+    if (QFile::exists(uiFontPath)) {
+        const int fontId = QFontDatabase::addApplicationFont(uiFontPath);
+        if (fontId >= 0) {
+            const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+            if (!families.isEmpty()) {
+                uiFontFamily = families.first();
+            }
+        }
+    }
     QFont uiFont = app.font();
-#ifdef Q_OS_WIN
+    uiFont.setFamily(uiFontFamily);
+    uiFont.setStyleHint(QFont::SansSerif);
     uiFont.setPointSize(10);
-#elif defined(Q_OS_LINUX)
-    uiFont.setPointSize(10);
-#endif
     app.setFont(uiFont);
 
-    QQuickStyle::setStyle(QStringLiteral("Fusion"));
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     const QString corePath = CorePaths::resolveCoreExecutable();
     if (corePath.isEmpty()) {
@@ -183,6 +178,32 @@ int main(int argc, char *argv[])
 
     WorkspaceController controller;
     controller.setCoreClient(std::move(client), corePath);
+
+    QProcess *mcpServer = nullptr;
+    if (!app.arguments().contains(QStringLiteral("--smoke-test"))) {
+        mcpServer = new QProcess(&app);
+        QObject::connect(mcpServer, &QProcess::stateChanged, &controller,
+                         [&controller](QProcess::ProcessState state) {
+                             controller.setMcpServerActive(state != QProcess::NotRunning);
+                         });
+        mcpServer->setProgram(corePath);
+        mcpServer->setArguments({
+            QStringLiteral("--mcp-server"),
+            QStringLiteral("--database-path"), controller.databasePath(),
+            QStringLiteral("--attachments-root"), controller.attachmentsRoot(),
+            QStringLiteral("--port"), QStringLiteral("49231"),
+        });
+        mcpServer->start();
+        controller.setMcpServerActive(mcpServer->waitForStarted(2000));
+        QObject::connect(&app, &QCoreApplication::aboutToQuit, mcpServer,
+                         [mcpServer]() {
+                             mcpServer->terminate();
+                             if (!mcpServer->waitForFinished(1000)) {
+                                 mcpServer->kill();
+                                 mcpServer->waitForFinished(1000);
+                             }
+                         });
+    }
     QObject::connect(&controller, &WorkspaceController::info,
                      &app, [](const QString &message) {
                          qInfo().noquote() << message;
@@ -208,6 +229,22 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "QML did not create the application window";
         return 1;
+    }
+
+    const QString screenshotPath = qEnvironmentVariable("FS_USER_STORIES_SCREENSHOT");
+    if (!screenshotPath.isEmpty()) {
+        QTimer::singleShot(800, &app, [&app, &engine, screenshotPath]() {
+            if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) {
+                if (!window->grabWindow().save(screenshotPath)) {
+                    qCritical().noquote() << "Could not save interface screenshot to"
+                                          << screenshotPath;
+                    app.exit(8);
+                    return;
+                }
+            }
+            app.quit();
+        });
+        return app.exec();
     }
 
     // CI launches the fully staged application with this flag. Reaching this

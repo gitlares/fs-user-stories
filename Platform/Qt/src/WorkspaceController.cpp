@@ -9,6 +9,8 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
+#include <QGuiApplication>
+#include <QClipboard>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -837,6 +839,21 @@ void WorkspaceController::importMarkdown(const QUrl &sourceFile)
         return;
     }
     emit info(tr("Imported from %1").arg(path));
+}
+
+void WorkspaceController::setMcpServerActive(bool active)
+{
+    if (m_mcpServerActive == active) {
+        return;
+    }
+    m_mcpServerActive = active;
+    emit mcpServerStateChanged();
+}
+
+void WorkspaceController::copyMcpServerUrl()
+{
+    QGuiApplication::clipboard()->setText(mcpServerUrl());
+    emit info(tr("MCP URL copied."));
 }
 
 void WorkspaceController::setBusy(bool busy)

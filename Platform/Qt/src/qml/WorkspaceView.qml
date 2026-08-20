@@ -5,6 +5,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    Theme { id: theme }
 
     component IconLabel: Label {
         font.family: appIconFont
@@ -21,11 +22,11 @@ Item {
         // ---------- LEFT SIDEBAR ----------
         Rectangle {
             id: sidebar
-            Layout.preferredWidth: 240
-            Layout.minimumWidth: 200
+            Layout.preferredWidth: 238
+            Layout.minimumWidth: 210
             Layout.maximumWidth: 300
             Layout.fillHeight: true
-            color: palette.alternateBase
+            color: theme.sidebar
 
             ColumnLayout {
                 anchors.fill: parent
@@ -34,16 +35,16 @@ Item {
                 // Projects header
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 42
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
                         anchors.rightMargin: 12
                         Label {
                             text: qsTr("Projects")
-                            font.weight: Font.Bold
+                            font.weight: Font.DemiBold
                             font.pixelSize: 12
-                            opacity: 0.55
+                            color: theme.secondaryText
                             Layout.fillWidth: true
                             renderType: Text.NativeRendering
                         }
@@ -54,22 +55,27 @@ Item {
                 ListView {
                     id: projectList
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
+                    Layout.fillHeight: true
                     model: workspace.projects
                     clip: true
                     delegate: ItemDelegate {
                         width: ListView.view ? ListView.view.width : 0
-                        height: 50
+                        height: 68
                         highlighted: modelData.id === workspace.currentProjectId
+                        leftPadding: 10; rightPadding: 10; topPadding: 3; bottomPadding: 3
+                        background: Rectangle {
+                            radius: theme.mediumRadius
+                            color: parent.highlighted ? theme.selection : "transparent"
+                        }
                         contentItem: RowLayout {
                             spacing: 8
                             anchors.margins: 0
                             IconLabel {
                                 text: "folder"
-                                Layout.leftMargin: 14
+                                Layout.leftMargin: 12
                                 Layout.rightMargin: 4
                                 opacity: 0.6
-                                color: highlighted ? "#4f56d2" : palette.text
+                                color: theme.secondaryText
                             }
                             ColumnLayout {
                                 spacing: 2
@@ -77,7 +83,7 @@ Item {
                                 Label {
                                     Layout.fillWidth: true
                                     text: modelData.name
-                                    font.pixelSize: 14
+                                    font.pixelSize: 13
                                     font.weight: Font.DemiBold
                                     elide: Label.ElideRight
                                 }
@@ -98,8 +104,8 @@ Item {
                                         font.pixelSize: 11; opacity: 0.5
                                         Layout.fillWidth: true
                                     }
-                                    // progress dots
                                     Label {
+                                        visible: false
                                         text: {
                                             var total = modelData.stories ? modelData.stories.length : 0
                                             var done = 0
@@ -120,6 +126,17 @@ Item {
                                         Layout.rightMargin: 12
                                     }
                                 }
+                                MacProgressBar {
+                                    Layout.preferredWidth: 44
+                                    Layout.preferredHeight: 4
+                                    value: {
+                                        var total = modelData.stories ? modelData.stories.length : 0
+                                        var done = 0
+                                        for (var i = 0; i < total; i++)
+                                            if (modelData.stories[i].status === "done") done++
+                                        return total > 0 ? done / total : 0
+                                    }
+                                }
                             }
                         }
                         onClicked: {
@@ -129,34 +146,40 @@ Item {
                     }
                 }
 
-                Item { Layout.fillHeight: true }
-
                 // ---- MCP Active indicator ----
-                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: theme.separator }
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: 12
                     spacing: 4
                     RowLayout {
                         spacing: 8
-                        Rectangle { width: 9; height: 9; radius: 5; color: "#22c55e" }
+                        Rectangle {
+                            width: 7; height: 7; radius: 4
+                            color: workspace.mcpServerActive ? theme.green : theme.tertiaryText
+                        }
                         Label {
-                            text: qsTr("MCP Active")
-                            font.pixelSize: 13; font.weight: Font.Bold
+                            text: workspace.mcpServerActive ? qsTr("MCP Active") : qsTr("MCP Inactive")
+                            font.pixelSize: 12; font.weight: Font.DemiBold
                             Layout.fillWidth: true
+                        }
+                        MacIconButton {
+                            iconName: "content_copy"; compact: true
+                            enabled: workspace.mcpServerActive
+                            onClicked: workspace.copyMcpServerUrl()
                         }
                     }
                     Label {
                         Layout.fillWidth: true
                         Layout.leftMargin: 17
-                        text: "http://127.0.0.1:49231/mcp"
+                        text: workspace.mcpServerUrl
                         font.family: "monospace"
                         font.pixelSize: 10
                         opacity: 0.55
                         elide: Label.ElideLeft
                     }
                 }
-                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: theme.separator }
 
                 // ---- Bottom action buttons (like mac) ----
                 Button {
@@ -202,23 +225,29 @@ Item {
         }
 
         // divider
-        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: palette.mid }
+        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: theme.separator }
 
         // ---------- MIDDLE: Stories list with Picker (Stories/Profiles) ----------
         StoryList {
-            Layout.preferredWidth: 420
+            id: storyList
+            Layout.preferredWidth: 460
+            Layout.minimumWidth: 400
+            Layout.maximumWidth: 620
             Layout.fillHeight: true
             onStorySelected: (s) => detailPane.setStory(s)
+            onProfileSelected: (actor) => profilePane.setProfile(actor)
         }
 
         // divider
-        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: palette.mid }
+        Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; color: theme.separator }
 
         // ---------- RIGHT: Story detail ----------
-        StoryDetailView {
-            id: detailPane
+        StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            currentIndex: storyList.showProfiles ? 1 : 0
+            StoryDetailView { id: detailPane }
+            ProfileDetailView { id: profilePane }
         }
     }
 }

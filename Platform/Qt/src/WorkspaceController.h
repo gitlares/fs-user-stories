@@ -29,6 +29,8 @@ class WorkspaceController : public QObject
     Q_PROPERTY(QString githubAuthorizationCode READ githubAuthorizationCode NOTIFY githubAuthorizationChanged)
     Q_PROPERTY(QString githubAuthorizationUrl READ githubAuthorizationUrl NOTIFY githubAuthorizationChanged)
     Q_PROPERTY(bool githubAuthorizationPending READ githubAuthorizationPending NOTIFY githubAuthorizationChanged)
+    Q_PROPERTY(bool mcpServerActive READ mcpServerActive NOTIFY mcpServerStateChanged)
+    Q_PROPERTY(QString mcpServerUrl READ mcpServerUrl CONSTANT)
 
 public:
     explicit WorkspaceController(QObject *parent = nullptr);
@@ -50,6 +52,9 @@ public:
     QString githubAuthorizationCode() const;
     QString githubAuthorizationUrl() const;
     bool githubAuthorizationPending() const { return !m_pendingAuthorization.isEmpty(); }
+    bool mcpServerActive() const { return m_mcpServerActive; }
+    QString mcpServerUrl() const { return QStringLiteral("http://127.0.0.1:49231/mcp"); }
+    void setMcpServerActive(bool active);
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void createProject(const QString &name, const QString &prefix);
@@ -98,6 +103,7 @@ public:
     Q_INVOKABLE QString createInvitation();
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
+    Q_INVOKABLE void copyMcpServerUrl();
 
     /// Decodes an invitation code and imports its shared Git repository.
     /// Returns true only after the project has been cloned and stored locally.
@@ -113,6 +119,7 @@ signals:
     void info(const QString &message);
     void syncConflicts(const QVariantList &conflicts);
     void githubAuthorizationChanged();
+    void mcpServerStateChanged();
 
 private:
     void setBusy(bool busy);
@@ -136,6 +143,7 @@ private:
     QString m_accessToken;
     StoryModel *m_storyModel = nullptr;
     bool m_busy = false;
+    bool m_mcpServerActive = false;
     QString m_lastError;
 };
 

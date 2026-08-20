@@ -6,20 +6,23 @@ import QtQuick.Layouts
 
 Item {
     id: root
-
     property string storyId: ""
+    property int storyNumber: 0
     property string storyTitle: ""
     property string storyAsA: ""
     property string storyIWant: ""
     property string storySoThat: ""
     property string storyStatus: ""
     property string storyNotes: ""
-    property var    storyCriteria: []
+    property var storyCriteria: []
     property string storyActorId: ""
     property var storyAttachments: []
     property bool editMode: false
-
-    readonly property bool readOnly: storyStatus === "done" || storyStatus === "completed"
+    property bool notesExpanded: false
+    readonly property bool readOnly: storyStatus === "done"
+    readonly property int metCriteriaCount: countMetCriteria()
+    readonly property real completion: storyCriteria.length > 0 ? metCriteriaCount / storyCriteria.length : 0
+    Theme { id: theme }
 
     Connections {
         target: workspace
@@ -27,398 +30,340 @@ Item {
     }
 
     component IconLabel: Label {
-        font.family: appIconFont
-        font.pixelSize: 14
-        font.weight: Font.DemiBold
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+        font.family: appIconFont; font.pixelSize: 17; font.weight: Font.DemiBold
+        color: theme.secondaryText
+        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
     }
-    component BigIconLabel: Label {
-        font.family: appIconFont
-        font.pixelSize: 18
-        font.weight: Font.DemiBold
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+    component StatementRow: RowLayout {
+        required property string label
+        required property string value
+        spacing: 22; Layout.fillWidth: true
+        Label {
+            text: parent.label; color: theme.secondaryText; font.pixelSize: 12
+            font.weight: Font.DemiBold; Layout.preferredWidth: 82
+        }
+        Label {
+            text: parent.value; color: theme.text; font.pixelSize: 14
+            Layout.fillWidth: true; wrapMode: Text.WordWrap
+        }
     }
+
+    Rectangle { anchors.fill: parent; color: theme.window }
 
     ColumnLayout {
+        anchors.centerIn: parent
+        visible: storyId === ""
+        spacing: 8
+        IconLabel { text: "description"; font.pixelSize: 42; opacity: 0.35; Layout.alignment: Qt.AlignHCenter }
+        Label { text: qsTr("Select a Story"); font.pixelSize: 18; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+        Label { text: qsTr("Choose a story to see its details."); color: theme.secondaryText; Layout.alignment: Qt.AlignHCenter }
+    }
+
+    ScrollView {
         anchors.fill: parent
-        anchors.margins: 24
-        spacing: 14
+        visible: storyId !== ""
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-        // ---- Header row: STATUS BADGE + ID + ⋯ (matches mac NUB-1 | Done) ----
-        RowLayout {
-            Layout.fillWidth: true
-            visible: storyId !== ""
-            spacing: 8
+        ColumnLayout {
+            width: Math.min(720, Math.max(480, root.width - 72))
+            x: Math.max(36, (root.width - width) / 2)
+            y: 34; spacing: 26
 
-            // Status badge pill
-            Rectangle {
-                radius: 12
-                color: {
-                    if (storyStatus === "done" || storyStatus === "completed") return "#dcfce7"
-                    if (storyStatus === "active") return "#dbeafe"
-                    return "#f3f4f6"
-                }
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: badgeText.implicitWidth + 28
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 10
                 RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 4
-                    BigIconLabel {
-                        text: storyStatus === "done" || storyStatus === "completed"
-                              ? "check_circle"
-                              : storyStatus === "active"
-                                ? "play_circle"
-                                : "edit_note"
-                        font.pixelSize: 14
-                        color: storyStatus === "done" || storyStatus === "completed" ? "#15803d"
-                              : storyStatus === "active" ? "#1d4ed8"
-                              : "#525252"
-                    }
+                    Layout.fillWidth: true; spacing: 10
                     Label {
-                        id: badgeText
-                        text: storyStatus.charAt(0).toUpperCase() + storyStatus.slice(1)
-                        font.pixelSize: 12
-                        font.weight: Font.Bold
-                        color: storyStatus === "done" || storyStatus === "completed" ? "#15803d"
-                              : storyStatus === "active" ? "#1d4ed8"
-                              : "#525252"
+                        text: workspace.currentProject.prefix + "-" + storyNumber
+                        font.family: "monospace"; font.pixelSize: 12; font.weight: Font.DemiBold
+                        color: theme.secondaryText
                     }
-                }
-            }
-
-            // "NUB-1" reference (we use the project prefix + first 8 of story id)
-            Label {
-                text: {
-                    var prefix = ""
-                    for (var i = 0; i < workspace.projects.length; i++) {
-                        if (workspace.projects[i].id === workspace.currentProjectId) {
-                            prefix = workspace.projects[i].prefix
-                            break
+                    MacComboBox {
+                        id: statusCombo
+                        model: [qsTr("Draft"), qsTr("Active"), qsTr("Done")]
+                        currentIndex: storyStatus === "active" ? 1 : storyStatus === "done" ? 2 : 0
+                        implicitHeight: 28; implicitWidth: 92
+                        onActivated: workspace.setStoryStatus(storyId, ["draft", "active", "done"][currentIndex])
+                    }
+                    Item { Layout.fillWidth: true }
+                    MacButton {
+                        text: root.editMode ? qsTr("Save Changes") : qsTr("Edit Story")
+                        iconName: "edit"; enabled: !root.readOnly
+                        onClicked: {
+                            if (!root.editMode) { root.editMode = true; return }
+                            var actorId = workspace.currentActors[actorEditor.currentIndex].id
+                            workspace.updateStory(storyId, titleEditor.text.trim(), actorId,
+                                                  wantEditor.text.trim(), outcomeEditor.text.trim(), storyCriteria)
+                            if (workspace.lastError === "") root.editMode = false
                         }
                     }
-                    return prefix + "-" + storyId.substr(0, 8)
-                }
-                font.pixelSize: 11
-                opacity: 0.5
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-                id: editStoryButton
-                text: root.readOnly ? qsTr("Read-only") : (root.editMode ? qsTr("Save Changes") : qsTr("Edit Story"))
-                flat: true
-                contentItem: RowLayout {
-                    spacing: 6
-                    BigIconLabel { text: root.readOnly ? "lock" : "edit" }
-                    Label { text: editStoryButton.text }
-                }
-                enabled: !root.readOnly
-                onClicked: {
-                    if (!root.editMode) { root.editMode = true; return }
-                    var actorId = workspace.currentActors[actorField.currentIndex].id
-                    workspace.updateStory(storyId, titleField.text.trim(), actorId,
-                                          wantField.text.trim(), outcomeField.text.trim(),
-                                          storyCriteria)
-                    if (workspace.lastError === "") {
-                        storyTitle = titleField.text; storyActorId = actorId
-                        storyAsA = workspace.currentActors[actorField.currentIndex].name; storyIWant = wantField.text
-                        storySoThat = outcomeField.text; root.editMode = false
+                    MacIconButton {
+                        iconName: "more_horiz"; circular: true
+                        onClicked: storyMenu.open()
+                        Menu {
+                            id: storyMenu
+                            MenuItem {
+                                text: qsTr("Duplicate Story")
+                                onTriggered: workspace.duplicateStory(storyId, storyTitle + qsTr(" Copy"))
+                            }
+                            MenuSeparator {}
+                            MenuItem { text: qsTr("Delete Story"); onTriggered: deleteStoryDialog.open() }
+                        }
                     }
                 }
-            }
-
-            ComboBox {
-                visible: storyId !== ""
-                model: ["draft", "active", "done"]
-                currentIndex: Math.max(0, model.indexOf(storyStatus))
-                onActivated: workspace.setStoryStatus(storyId, currentValue)
-            }
-
-            ToolButton {
-                contentItem: BigIconLabel { text: "more_horiz" }
-                onClicked: storyMenu.open()
-                Menu {
-                    id: storyMenu
-                    MenuItem {
-                        text: qsTr("Delete this story")
-                        onTriggered: { workspace.deleteStory(storyId); root.clear() }
-                    }
-                }
-            }
-        }
-
-        // ---- Title (big, bold) ----
-        TextField {
-            id: titleField
-            visible: storyId !== ""
-            text: storyTitle
-            readOnly: !root.editMode
-            font.pixelSize: 32
-            font.weight: Font.Bold
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
-        }
-
-        // ---- Read-only notice ----
-        Rectangle {
-            visible: storyId !== "" && root.readOnly
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            radius: 6
-            color: "#f3f4f6"
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 8
-                BigIconLabel { text: "lock"; opacity: 0.6 }
                 Label {
-                    text: qsTr("Completed stories are read-only. Change status to Active or Draft to edit.")
-                    font.pixelSize: 12; opacity: 0.7
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
+                    visible: !root.editMode
+                    text: storyTitle; font.pixelSize: 30; font.weight: Font.DemiBold
+                    color: theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap
                 }
-            }
-        }
-
-        // ---- "Select a story" placeholder ----
-        ColumnLayout {
-            visible: storyId === ""
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Label {
-                text: qsTr("Select a story from the list to view its details.")
-                opacity: 0.5
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: 80
-                font.pixelSize: 13
-            }
-        }
-
-        // ---- Editable fields ----
-        ColumnLayout {
-            visible: storyId !== ""
-            Layout.fillWidth: true
-            enabled: root.editMode && !root.readOnly
-            spacing: 10
-
-            ColumnLayout {
-                spacing: 4; Layout.fillWidth: true
-                Label { text: qsTr("As a"); font.weight: Font.DemiBold; opacity: 0.55; font.pixelSize: 11 }
-                ComboBox {
-                    id: actorField
-                    Layout.fillWidth: true
-                    model: workspace.currentActors
-                    textRole: "name"
-                    currentIndex: root.actorIndexForId(root.storyActorId)
+                MacTextField {
+                    id: titleEditor; visible: root.editMode; text: storyTitle
+                    font.pixelSize: 22; font.weight: Font.DemiBold; Layout.fillWidth: true
                 }
-            }
-            ColumnLayout {
-                spacing: 4; Layout.fillWidth: true
-                Label { text: qsTr("I want"); font.weight: Font.DemiBold; opacity: 0.55; font.pixelSize: 11 }
-                TextField { id: wantField; Layout.fillWidth: true; text: storyIWant; placeholderText: qsTr("I want …"); font.pixelSize: 13 }
-            }
-            ColumnLayout {
-                spacing: 4; Layout.fillWidth: true
-                Label { text: qsTr("So that"); font.weight: Font.DemiBold; opacity: 0.55; font.pixelSize: 11 }
-                TextField { id: outcomeField; Layout.fillWidth: true; text: storySoThat; placeholderText: qsTr("So that …"); font.pixelSize: 13 }
-            }
-
-            // Notes
-            ColumnLayout {
-                spacing: 4; Layout.fillWidth: true
-                Label { text: qsTr("Notes"); font.weight: Font.DemiBold; opacity: 0.55; font.pixelSize: 11 }
-                ScrollView {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 100
-                    TextArea {
-                        id: notesField
-                        text: storyNotes
-                        wrapMode: TextArea.Wrap
-                        font.pixelSize: 12
-                    }
-                }
-                Button {
-                    text: qsTr("Save Notes")
-                    enabled: notesField.text !== storyNotes
-                    onClicked: {
-                        workspace.updateStoryNotes(storyId, notesField.text)
-                        if (workspace.lastError === "") storyNotes = notesField.text
-                    }
-                }
-            }
-        }
-
-        // ---- Managed attachments ----
-        RowLayout {
-            Layout.fillWidth: true
-            visible: storyId !== ""
-            Label {
-                text: qsTr("Attachments")
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-                Layout.fillWidth: true
-            }
-            ToolButton {
-                contentItem: BigIconLabel { text: "attach_file" }
-                enabled: !root.readOnly
-                ToolTip.text: qsTr("Add attachments (maximum 10 MB each)")
-                ToolTip.visible: hovered
-                onClicked: attachmentDialog.open()
-            }
-        }
-        ListView {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, 120)
-            visible: storyId !== "" && storyAttachments.length > 0
-            model: storyAttachments
-            clip: true
-            delegate: ItemDelegate {
-                width: ListView.view ? ListView.view.width : 0
-                contentItem: RowLayout {
-                    IconLabel { text: "description" }
-                    Label { text: modelData.filename; Layout.fillWidth: true; elide: Text.ElideMiddle }
-                    Label { text: Math.max(1, Math.round(modelData.byteSize / 1024)) + " KB"; opacity: 0.55 }
-                    ToolButton {
-                        text: "×"
-                        enabled: !root.readOnly
-                        onClicked: workspace.removeAttachment(storyId, modelData.id)
-                    }
-                }
-                onClicked: workspace.openAttachment(modelData.relativePath)
-            }
-        }
-
-        // ---- Acceptance Criteria section ----
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            visible: storyId !== ""
-            Label {
-                text: qsTr("Acceptance Criteria")
-                font.pixelSize: 13; font.weight: Font.DemiBold
-                Layout.fillWidth: true
-            }
-            ToolButton {
-                contentItem: BigIconLabel { text: "add" }
-                ToolTip.text: qsTr("Add criterion")
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                enabled: !root.readOnly
-                onClicked: addCriterionDialog.open()
-            }
-        }
-        ListView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: storyId !== ""
-            model: storyCriteria
-            clip: true
-            spacing: 6
-            delegate: ItemDelegate {
-                width: ListView.view ? ListView.view.width : 0
-                height: 38
-                contentItem: RowLayout {
-                    spacing: 10
-                    anchors.margins: 0
-                    Rectangle {
-                        width: 18; height: 18; radius: 9
-                        color: modelData.isMet ? "#22c55e" : "#d4d4d8"
-                        Layout.leftMargin: 4
-                        BigIconLabel { anchors.centerIn: parent; text: modelData.isMet ? "check" : ""; color: "white"; font.pixelSize: 11 }
-                    }
+                RowLayout {
+                    visible: root.readOnly; spacing: 8; Layout.fillWidth: true
+                    IconLabel { text: "lock"; font.pixelSize: 14 }
                     Label {
-                        text: modelData.text
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        font.pixelSize: 13
-                        opacity: modelData.isMet ? 0.6 : 1
-                    }
-                    ToolButton {
-                        text: "×"
-                        enabled: !root.readOnly
-                        onClicked: workspace.deleteAcceptanceCriterion(storyId, modelData.id)
+                        text: qsTr("Completed stories are read-only. Change status to Active or Draft to edit.")
+                        color: theme.secondaryText; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.WordWrap
                     }
                 }
-                onClicked: if (!root.readOnly) workspace.toggleAcceptanceCriterion(storyId, modelData.id)
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: statementContent.implicitHeight + 44
+                radius: theme.cardRadius; color: theme.panel
+                border.width: 1; border.color: Qt.rgba(0, 0, 0, 0.035)
+                ColumnLayout {
+                    id: statementContent
+                    anchors.fill: parent; anchors.margins: 22; spacing: 18
+                    StatementRow { visible: !root.editMode; label: qsTr("As"); value: storyAsA }
+                    StatementRow { visible: !root.editMode; label: qsTr("I want"); value: storyIWant }
+                    StatementRow { visible: !root.editMode; label: qsTr("So that"); value: storySoThat }
+                    RowLayout {
+                        visible: root.editMode; Layout.fillWidth: true
+                        Label { text: qsTr("As"); color: theme.secondaryText; Layout.preferredWidth: 82 }
+                        MacComboBox {
+                            id: actorEditor; Layout.fillWidth: true; model: workspace.currentActors; textRole: "name"
+                            currentIndex: root.actorIndexForId(root.storyActorId)
+                        }
+                    }
+                    RowLayout {
+                        visible: root.editMode; Layout.fillWidth: true
+                        Label { text: qsTr("I want"); color: theme.secondaryText; Layout.preferredWidth: 82 }
+                        MacTextField { id: wantEditor; text: storyIWant; Layout.fillWidth: true }
+                    }
+                    RowLayout {
+                        visible: root.editMode; Layout.fillWidth: true
+                        Label { text: qsTr("So that"); color: theme.secondaryText; Layout.preferredWidth: 82 }
+                        MacTextField { id: outcomeEditor; text: storySoThat; Layout.fillWidth: true }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 12
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: qsTr("Acceptance Criteria"); font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    MacIconButton {
+                        iconName: "add"; enabled: !root.readOnly
+                        onClicked: addCriterionDialog.open()
+                    }
+                }
+                Repeater {
+                    model: storyCriteria
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true; spacing: 0
+                        ItemDelegate {
+                            Layout.fillWidth: true; implicitHeight: 42
+                            background: Rectangle { color: "transparent" }
+                            contentItem: RowLayout {
+                                spacing: 12
+                                IconLabel {
+                                    text: modelData.isMet ? "check_circle" : "radio_button_unchecked"
+                                    color: modelData.isMet ? theme.green : theme.secondaryText; font.pixelSize: 20
+                                }
+                                Label {
+                                    text: modelData.text; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                                    color: modelData.isMet ? theme.secondaryText : theme.text
+                                    font.strikeout: modelData.isMet
+                                }
+                                MacIconButton {
+                                    iconName: "delete"; enabled: !root.readOnly
+                                    onClicked: workspace.deleteAcceptanceCriterion(storyId, modelData.id)
+                                }
+                            }
+                            onClicked: if (!root.readOnly) workspace.toggleAcceptanceCriterion(storyId, modelData.id)
+                        }
+                        Rectangle { Layout.fillWidth: true; Layout.leftMargin: 32; Layout.preferredHeight: 1; color: theme.separator }
+                    }
+                }
+                Label {
+                    visible: storyCriteria.length === 0; text: qsTr("No acceptance criteria yet.")
+                    color: theme.secondaryText; Layout.fillWidth: true
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 10
+                RowLayout {
+                    Label { text: qsTr("Completion"); font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    Label { text: Math.round(root.completion * 100) + "%"; font.pixelSize: 19; font.weight: Font.DemiBold }
+                }
+                MacProgressBar { Layout.fillWidth: true; value: root.completion }
+                Label {
+                    text: qsTr("%1 of %2 criteria met").arg(root.metCriteriaCount).arg(storyCriteria.length)
+                    color: theme.secondaryText; font.pixelSize: 12
+                }
+                MacButton {
+                    visible: storyStatus === "active" && storyCriteria.length > 0 && root.completion === 1
+                    text: qsTr("Mark as Completed"); iconName: "check_circle"; prominent: true
+                    Layout.fillWidth: true; onClicked: workspace.setStoryStatus(storyId, "done")
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 10
+                ItemDelegate {
+                    Layout.fillWidth: true; implicitHeight: 36
+                    background: Rectangle { color: "transparent" }
+                    contentItem: RowLayout {
+                        IconLabel { text: "chevron_right"; rotation: root.notesExpanded ? 90 : 0 }
+                        Label { text: qsTr("Notes"); font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                        Label { visible: storyNotes === ""; text: qsTr("Optional"); color: theme.tertiaryText }
+                    }
+                    onClicked: root.notesExpanded = !root.notesExpanded
+                }
+                TextArea {
+                    id: notesEditor; visible: root.notesExpanded; text: storyNotes
+                    readOnly: root.readOnly; wrapMode: TextArea.Wrap; Layout.fillWidth: true; Layout.preferredHeight: 110
+                    padding: 10
+                    background: Rectangle { radius: theme.mediumRadius; color: theme.panel; border.width: 1; border.color: theme.separator }
+                }
+                RowLayout {
+                    visible: root.notesExpanded && !root.readOnly; Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    MacButton {
+                        text: qsTr("Save Notes"); prominent: true; enabled: notesEditor.text.trim() !== storyNotes
+                        onClicked: workspace.updateStoryNotes(storyId, notesEditor.text.trim())
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 12
+                RowLayout {
+                    Label { text: qsTr("Attachments"); font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                    MacIconButton { iconName: "attach_file"; enabled: !root.readOnly; onClicked: attachmentDialog.open() }
+                }
+                Rectangle {
+                    visible: storyAttachments.length === 0
+                    Layout.fillWidth: true; Layout.preferredHeight: 138
+                    radius: theme.mediumRadius; color: Qt.rgba(0, 0, 0, 0.018)
+                    border.width: 1; border.color: theme.separator
+                    ColumnLayout {
+                        anchors.centerIn: parent; spacing: 7
+                        IconLabel { text: "attach_file"; font.pixelSize: 34; color: theme.accent; Layout.alignment: Qt.AlignHCenter }
+                        Label { text: qsTr("Drop files here or choose files"); font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+                        Label { text: qsTr("Images, documents, and other project files"); color: theme.secondaryText; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter }
+                    }
+                    DropArea {
+                        anchors.fill: parent
+                        enabled: !root.readOnly
+                        onDropped: (drop) => {
+                            if (drop.hasUrls) workspace.importAttachments(storyId, drop.urls)
+                        }
+                    }
+                    MouseArea { anchors.fill: parent; enabled: !root.readOnly; onClicked: attachmentDialog.open() }
+                }
+                Repeater {
+                    model: storyAttachments
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        Layout.fillWidth: true; implicitHeight: 42
+                        contentItem: RowLayout {
+                            IconLabel { text: "description" }
+                            Label { text: modelData.filename; Layout.fillWidth: true; elide: Text.ElideMiddle }
+                            Label { text: Math.max(1, Math.round(modelData.byteSize / 1024)) + " KB"; color: theme.secondaryText }
+                            MacIconButton { iconName: "delete"; enabled: !root.readOnly; onClicked: workspace.removeAttachment(storyId, modelData.id) }
+                        }
+                        background: Rectangle { radius: theme.smallRadius; color: parent.hovered ? theme.control : "transparent" }
+                        onClicked: workspace.openAttachment(modelData.relativePath)
+                    }
+                }
             }
         }
     }
 
     Dialog {
-        id: addCriterionDialog
-        title: qsTr("Add Acceptance Criterion")
-        anchors.centerIn: parent
-        modal: true
-        width: 420
-        contentItem: TextField { id: newCriterionText; placeholderText: qsTr("Expected result") }
+        id: addCriterionDialog; title: qsTr("Add Acceptance Criterion")
+        anchors.centerIn: parent; modal: true; width: 420
+        contentItem: MacTextField { id: newCriterionText; placeholderText: qsTr("Expected result") }
         footer: DialogButtonBox {
-            Button {
-                text: qsTr("Add"); enabled: newCriterionText.text.trim() !== ""
+            MacButton {
+                text: qsTr("Add"); prominent: true; enabled: newCriterionText.text.trim() !== ""
                 onClicked: {
                     workspace.addAcceptanceCriterion(storyId, newCriterionText.text.trim())
                     if (workspace.lastError === "") { newCriterionText.clear(); addCriterionDialog.close() }
                 }
             }
-            Button { text: qsTr("Cancel"); onClicked: addCriterionDialog.close() }
+            MacButton { text: qsTr("Cancel"); onClicked: addCriterionDialog.close() }
         }
     }
-
+    Dialog {
+        id: deleteStoryDialog; title: qsTr("Delete Story?"); anchors.centerIn: parent; modal: true; width: 440
+        contentItem: Label {
+            text: qsTr("Deleting this story will permanently remove it, its acceptance criteria, and its attachments. This cannot be undone.")
+            wrapMode: Text.WordWrap
+        }
+        footer: DialogButtonBox {
+            MacButton { text: qsTr("Delete Story"); destructive: true; onClicked: { workspace.deleteStory(storyId); root.clear(); deleteStoryDialog.close() } }
+            MacButton { text: qsTr("Cancel"); onClicked: deleteStoryDialog.close() }
+        }
+    }
     FileDialog {
-        id: attachmentDialog
-        title: qsTr("Add Attachments")
-        fileMode: FileDialog.OpenFiles
+        id: attachmentDialog; title: qsTr("Add Attachments"); fileMode: FileDialog.OpenFiles
         onAccepted: workspace.importAttachments(storyId, selectedFiles)
     }
 
+    function countMetCriteria() {
+        var count = 0
+        for (var i = 0; i < storyCriteria.length; i++) if (storyCriteria[i].isMet) count++
+        return count
+    }
     function setStory(s) {
-        storyId      = s.id        || ""
-        storyTitle   = s.title     || ""
-        storyAsA     = s.asA       || ""
-        storyIWant   = s.iWant     || ""
-        storySoThat  = s.soThat    || ""
-        storyStatus  = s.status    || ""
-        storyNotes   = s.notes     || ""
-        storyCriteria = s.criteria || []
-        storyActorId = s.actorId || ""
-        storyAttachments = s.attachments || []
-        editMode = false
+        storyId = s.id || ""; storyNumber = s.number || 0; storyTitle = s.title || ""
+        storyAsA = s.asA || ""; storyIWant = s.iWant || ""; storySoThat = s.soThat || ""
+        storyStatus = s.status || ""; storyNotes = s.notes || ""; storyCriteria = s.criteria || []
+        storyActorId = s.actorId || ""; storyAttachments = s.attachments || []
+        editMode = false; notesExpanded = storyNotes !== ""
     }
     function clear() {
-        storyId = ""; storyTitle = ""; storyAsA = ""
-        storyIWant = ""; storySoThat = ""; storyStatus = ""
-        storyNotes = ""; storyCriteria = []
-        storyActorId = ""; storyAttachments = []; editMode = false
+        storyId = ""; storyNumber = 0; storyTitle = ""; storyAsA = ""; storyIWant = ""
+        storySoThat = ""; storyStatus = ""; storyNotes = ""; storyCriteria = []
+        storyActorId = ""; storyAttachments = []; editMode = false; notesExpanded = false
     }
-
-    function actorIdForName(name) {
-        for (var i = 0; i < workspace.currentActors.length; i++)
-            if (workspace.currentActors[i].name.toLowerCase() === name.trim().toLowerCase())
-                return workspace.currentActors[i].id
-        return storyActorId
-    }
-
     function actorIndexForId(actorId) {
         for (var i = 0; i < workspace.currentActors.length; i++)
             if (workspace.currentActors[i].id === actorId) return i
         return 0
     }
-
     function reloadStory() {
         if (storyId === "") return
         var stories = workspace.currentProject.stories || []
         for (var i = 0; i < stories.length; i++) {
             if (stories[i].id !== storyId) continue
-            var actorName = ""
+            var actorName = qsTr("Unknown actor")
             for (var j = 0; j < workspace.currentActors.length; j++)
                 if (workspace.currentActors[j].id === stories[i].actorId) actorName = workspace.currentActors[j].name
-            setStory({ id: stories[i].id, title: stories[i].title, asA: actorName,
-                       actorId: stories[i].actorId, iWant: stories[i].want,
-                       soThat: stories[i].outcome, status: stories[i].status,
-                       notes: stories[i].notes, criteria: stories[i].acceptanceCriteria,
-                       attachments: stories[i].attachments })
+            setStory({ id: stories[i].id, number: stories[i].number, title: stories[i].title,
+                asA: actorName, actorId: stories[i].actorId, iWant: stories[i].want,
+                soThat: stories[i].outcome, status: stories[i].status, notes: stories[i].notes,
+                criteria: stories[i].acceptanceCriteria, attachments: stories[i].attachments })
             return
         }
         clear()

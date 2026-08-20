@@ -7,13 +7,14 @@ import QtCore
 
 ApplicationWindow {
     id: window
+    Theme { id: theme }
     title: appInfo.name + " " + appInfo.version
-    width: 1100
-    height: 720
-    minimumWidth: 900
-    minimumHeight: 600
+    width: 1280
+    height: 800
+    minimumWidth: 1024
+    minimumHeight: 680
     visible: true
-    color: palette.window
+    color: theme.window
 
     // Reusable icon label style — Material Symbols Outlined (variable font,
     // weight axis 100-700). We pick 500 ("Demibold") because macs SF Symbols
@@ -54,72 +55,68 @@ ApplicationWindow {
 
     // Toolbar (mac-style primary action row).
     header: ToolBar {
-        height: 44
+        height: 52
         background: Rectangle {
-            color: palette.window
+            color: theme.toolbar
             Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1
-                color: palette.mid
+                color: theme.separator
             }
         }
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 8
+            anchors.leftMargin: 18
+            anchors.rightMargin: 14
             spacing: 8
 
+            Item { Layout.preferredWidth: 238 }
+            IconLabel { text: "side_navigation"; font.pixelSize: 19; opacity: 0.85 }
             Label {
                 Layout.fillWidth: true
-                text: {
-                    if (workspace.currentProjectId === "") return qsTr("FS User Stories")
-                    var id = workspace.currentProjectId
-                    for (var i = 0; i < workspace.projects.length; i++) {
-                        if (workspace.projects[i].id === id) return workspace.projects[i].name
-                    }
-                    return qsTr("FS User Stories")
-                }
-                font.pixelSize: 14
+                text: qsTr("FS User Stories")
+                font.pixelSize: 15
                 font.weight: Font.Bold
                 elide: Label.ElideRight
             }
 
             // Sync indicator
-            ToolButton {
-                contentItem: IconLabel { text: "sync" }
+            MacIconButton {
+                iconName: "sync"
                 ToolTip.text: qsTr("Synchronize with Git")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
                 onClicked: gitDialog.open()
             }
-            ToolButton {
-                contentItem: IconLabel { text: "refresh" }
+            MacIconButton {
+                iconName: "refresh"
                 ToolTip.text: qsTr("Refresh")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
                 onClicked: workspace.refreshCurrent()
             }
-            ToolButton {
+            MacIconButton {
                 visible: workspace.currentProjectId !== ""
-                enabled: workspace.currentActors.length > 0
-                contentItem: IconLabel { text: "person_add" }
+                iconName: "person_add"
                 ToolTip.text: qsTr("Add Profile")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
                 onClicked: newActorDialog.open()
             }
-            ToolButton {
+            MacIconButton {
                 visible: workspace.currentProjectId !== ""
-                contentItem: IconLabel { text: "edit_square" }
+                enabled: workspace.currentActors.length > 0
+                iconName: "edit_square"
                 ToolTip.text: qsTr("Add Story")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
                 onClicked: newStoryDialog.open()
             }
-            ToolButton {
-                contentItem: IconLabel { text: "more_horiz" }
+            MacIconButton {
+                iconName: "more_horiz"
+                circular: true
                 ToolTip.text: qsTr("More")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
@@ -187,15 +184,6 @@ ApplicationWindow {
 
         WelcomeView { id: welcome }
         WorkspaceView {}
-    }
-
-    menuBar: MenuBar {
-        Menu {
-            title: qsTr("&File")
-            Action { text: qsTr("New project…"); onTriggered: welcome.openCreateProject() }
-            MenuSeparator {}
-            Action { text: qsTr("Quit"); onTriggered: Qt.quit() }
-        }
     }
 
     // ---- Dialogs ----

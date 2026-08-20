@@ -5,27 +5,38 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    signal actorSelected(var actor)
     property var selectedActor: ({})
+    Theme { id: theme }
 
-    Rectangle { anchors.fill: parent; color: palette.window; z: -1 }
+    Rectangle { anchors.fill: parent; color: theme.window; z: -1 }
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
         RowLayout {
             Layout.fillWidth: true; Layout.margins: 16
-            Label { text: qsTr("Profiles"); font.pixelSize: 26; font.weight: Font.Bold; Layout.fillWidth: true }
-            Button { text: qsTr("Add Profile"); onClicked: addDialog.open() }
+            Label { text: qsTr("Profiles"); font.pixelSize: 22; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            MacButton { text: qsTr("Add Profile"); iconName: "person_add"; onClicked: addDialog.open() }
         }
-        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.mid }
+        Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: theme.separator }
         ListView {
             Layout.fillWidth: true; Layout.fillHeight: true
             model: workspace.currentActors; clip: true
             delegate: ItemDelegate {
-                width: ListView.view ? ListView.view.width : 0; height: 62
+                width: ListView.view ? ListView.view.width : 0; height: 70
+                leftPadding: 12; rightPadding: 12; topPadding: 4; bottomPadding: 4
+                background: Rectangle {
+                    radius: theme.mediumRadius
+                    color: modelData.id === root.selectedActor.id ? theme.selection
+                         : parent.hovered ? theme.control : "transparent"
+                }
                 contentItem: RowLayout {
                     spacing: 12
-                    Label { text: "●"; color: "#0a84ff"; Layout.leftMargin: 12 }
+                    Rectangle {
+                        width: 34; height: 34; radius: 17; color: Qt.rgba(0.04, 0.52, 1, 0.12)
+                        Label { anchors.centerIn: parent; text: modelData.name.charAt(0).toUpperCase(); color: theme.accent; font.weight: Font.Bold }
+                    }
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 2
                         Label { text: modelData.name; font.weight: Font.DemiBold }
@@ -43,8 +54,7 @@ Item {
                 }
                 onClicked: {
                     root.selectedActor = modelData
-                    editName.text = modelData.name; editRole.text = modelData.role
-                    editDialog.open()
+                    root.actorSelected(modelData)
                 }
             }
         }

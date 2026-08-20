@@ -18,3 +18,11 @@ texts and this notice.
 FS User Stories uses QtKeychain 0.15.0 to store GitHub access tokens in the
 operating system's secure credential service. QtKeychain is distributed under
 the Modified BSD License. Source: https://github.com/frankosterfeld/qtkeychain
+
+# Interface fonts
+
+- Inter is bundled as the cross-platform interface font under the SIL Open
+  Font License 1.1. Its complete license is in `Support/Licenses/Inter-OFL.txt`.
+- Material Symbols is bundled for interface icons under the Apache License 2.0.
+
+The Qt application does not bundle Apple SF Pro or SF Symbols.
