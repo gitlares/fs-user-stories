@@ -23,6 +23,9 @@ namespace fsuserstories {
 
 namespace {
 constexpr auto kGitHubOAuthClientId = "Ov23liEDQnlgdtJTGCUt";
+constexpr int kAutoSyncDebounceMs = 3'000;
+constexpr int kAutoSyncMaximumDelayMs = 15'000;
+constexpr int kRemoteRefreshMs = 30'000;
 }
 
 WorkspaceController::WorkspaceController(QObject *parent)
@@ -34,6 +37,14 @@ WorkspaceController::WorkspaceController(QObject *parent)
 {
     // Make sure the data roots exist before the first core call.
     QFileInfo::exists(m_databasePath); // touch file path awareness
+
+    m_autoSyncTimer.setSingleShot(true);
+    connect(&m_autoSyncTimer, &QTimer::timeout, this,
+            &WorkspaceController::runAutomaticSynchronization);
+    m_remoteRefreshTimer.setInterval(kRemoteRefreshMs);
+    connect(&m_remoteRefreshTimer, &QTimer::timeout, this,
+            &WorkspaceController::runAutomaticSynchronization);
+    m_remoteRefreshTimer.start();
 }
 
 void WorkspaceController::setCoreClient(std::unique_ptr<CoreClient> client,
@@ -109,6 +120,7 @@ void WorkspaceController::createProject(const QString &name, const QString &pref
         applyProject(project);
     }
     load();
+    scheduleAutomaticSynchronization();
 }
 
 void WorkspaceController::updateProject(const QString &name, const QString &prefix)
@@ -300,6 +312,7 @@ void WorkspaceController::createStory(const QString &title,
         applyProject(project);
     }
     refreshCurrent();
+    scheduleAutomaticSynchronization();
 }
 
 void WorkspaceController::updateStory(const QString &storyId,
@@ -405,6 +418,7 @@ void WorkspaceController::importAttachments(const QString &storyId,
     }
     applyProject(reply.value("result").toMap().value("project").toMap());
     refreshCurrent();
+    scheduleAutomaticSynchronization();
 }
 
 void WorkspaceController::removeAttachment(const QString &storyId,
@@ -430,6 +444,7 @@ void WorkspaceController::removeAttachment(const QString &storyId,
     }
     applyProject(reply.value("result").toMap().value("project").toMap());
     refreshCurrent();
+    scheduleAutomaticSynchronization();
 }
 
 void WorkspaceController::openAttachment(const QString &relativePath)
@@ -469,9 +484,17 @@ void WorkspaceController::deleteStory(const QString &storyId)
         applyProject(project);
     }
     refreshCurrent();
+    scheduleAutomaticSynchronization();
 }
 
 void WorkspaceController::synchronize()
+{
+    m_autoSyncTimer.stop();
+    m_localChangeWindow.invalidate();
+    synchronizeCurrentProject(true);
+}
+
+void WorkspaceController::synchronizeCurrentProject(bool announceCompletion)
 {
     if (!m_client || m_currentProjectId.isEmpty()) {
         return;
@@ -505,7 +528,9 @@ void WorkspaceController::synchronize()
         m_pendingSyncConflicts.clear();
         emit pendingSyncConflictsChanged();
     }
-    emit info(tr("Project synchronized."));
+    if (announceCompletion) {
+        emit info(tr("Project synchronized."));
+    }
     refreshCurrent();
 }
 
@@ -609,6 +634,7 @@ void WorkspaceController::connectRepository(const QString &remoteUrl)
         applyProject(project);
     }
     emit info(tr("Remote repository connected."));
+    scheduleAutomaticSynchronization();
 }
 
 bool WorkspaceController::createPrivateGitHubRepository()
@@ -1187,7 +1213,42 @@ bool WorkspaceController::applyCurrentOperation(QVariantMap operation)
     }
     applyProject(project);
     refreshCurrent();
+    scheduleAutomaticSynchronization();
     return true;
+}
+
+bool WorkspaceController::currentProjectHasRemote() const
+{
+    return !m_currentProject.value("gitRepository").toMap()
+                .value("remoteUrl").toString().trimmed().isEmpty();
+}
+
+void WorkspaceController::scheduleAutomaticSynchronization()
+{
+    // Local-only projects must stay local until the user explicitly connects
+    // a repository. This also prevents pointless background core calls.
+    if (!currentProjectHasRemote()) {
+        return;
+    }
+
+    if (!m_localChangeWindow.isValid()) {
+        m_localChangeWindow.start();
+    }
+    const int remaining = qMax(0, kAutoSyncMaximumDelayMs
+                                  - static_cast<int>(m_localChangeWindow.elapsed()));
+    m_autoSyncTimer.start(qMin(kAutoSyncDebounceMs, remaining));
+}
+
+void WorkspaceController::runAutomaticSynchronization()
+{
+    if (!currentProjectHasRemote() || m_busy) {
+        return;
+    }
+
+    // A background pull also publishes queued edits.  Manual synchronization
+    // remains available for an immediate, user-visible refresh.
+    m_localChangeWindow.invalidate();
+    synchronizeCurrentProject(false);
 }
 
 } // namespace fsuserstories

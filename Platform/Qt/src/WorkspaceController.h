@@ -2,7 +2,9 @@
 #pragma once
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QString>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QUrl>
@@ -145,6 +147,10 @@ private:
     QVariantMap runCommand(const QVariantMap &command);
     void applyProject(const QVariantMap &project);
     bool applyCurrentOperation(QVariantMap operation);
+    bool currentProjectHasRemote() const;
+    void scheduleAutomaticSynchronization();
+    void runAutomaticSynchronization();
+    void synchronizeCurrentProject(bool announceCompletion);
     bool joinInvitationRemote(const QString &remoteUrl,
                               const QString &accessToken = QString());
     bool createPrivateGitHubRepositoryWithToken(const QString &accessToken);
@@ -169,6 +175,9 @@ private:
     bool m_busy = false;
     bool m_mcpServerActive = false;
     QString m_lastError;
+    QTimer m_autoSyncTimer;
+    QTimer m_remoteRefreshTimer;
+    QElapsedTimer m_localChangeWindow;
 };
 
 } // namespace fsuserstories
