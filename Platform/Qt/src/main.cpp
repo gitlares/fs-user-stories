@@ -234,7 +234,8 @@ int main(int argc, char *argv[])
         controller.createStory(QStringLiteral("Packaged application opens"),
                                QStringLiteral("tester"),
                                QStringLiteral("exercise the Windows build"),
-                               QStringLiteral("distribution failures are caught"));
+                               QStringLiteral("distribution failures are caught"),
+                               QStringLiteral("The story is saved and can be read back"));
         if (!controller.lastError().isEmpty()) {
             qCritical().noquote() << "Create-story smoke test failed:"
                                   << controller.lastError();

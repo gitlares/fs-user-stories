@@ -23,17 +23,27 @@ QVariant StoryModel::data(const QModelIndex &index, int role) const
     }
     const QVariantMap match = m_matches.at(index.row()).toMap();
     const QVariantMap story = match.value("story").toMap();
+    const QVariantMap project = match.value("project").toMap();
+    const QString actorId = story.value("actorId").toString();
+    QString actorName;
+    for (const QVariant &actorValue : project.value("actors").toList()) {
+        const QVariantMap actor = actorValue.toMap();
+        if (actor.value("id").toString() == actorId) {
+            actorName = actor.value("name").toString();
+            break;
+        }
+    }
     switch (role) {
     case IdRole:        return story.value("id");
     case TitleRole:     return story.value("title");
-    case AsARole:       return story.value("asA");
-    case IWantRole:     return story.value("iWant");
-    case SoThatRole:    return story.value("soThat");
+    case AsARole:       return actorName;
+    case IWantRole:     return story.value("want");
+    case SoThatRole:    return story.value("outcome");
     case StatusRole:    return story.value("status");
-    case ProfileRole:   return story.value("profileId");
-    case CriteriaRole:  return story.value("criteria");
+    case ProfileRole:   return actorId;
+    case CriteriaRole:  return story.value("acceptanceCriteria");
     case NotesRole:     return story.value("notes");
-    case UpdatedAtRole: return story.value("updatedAt");
+    case UpdatedAtRole: return story.value("createdAt");
     }
     return {};
 }

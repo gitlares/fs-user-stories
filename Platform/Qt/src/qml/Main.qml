@@ -319,7 +319,10 @@ ApplicationWindow {
             Button {
                 text: qsTr("Save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 enabled: naName.text.trim() !== ""
-                onClicked: { newActorDialog.close() }   // wired in next iteration
+                onClicked: {
+                    workspace.addActor(naName.text.trim(), naRole.text.trim())
+                    if (workspace.lastError === "") newActorDialog.close()
+                }
             }
             Button {
                 text: qsTr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
@@ -344,16 +347,27 @@ ApplicationWindow {
             TextField { id: nsIWant; Layout.fillWidth: true }
             Label { text: qsTr("So that") }
             TextField { id: nsSoThat; Layout.fillWidth: true }
+            Label { text: qsTr("Acceptance criterion") }
+            TextField {
+                id: nsCriterion
+                Layout.fillWidth: true
+                placeholderText: qsTr("How will we know it is complete?")
+            }
         }
         footer: DialogButtonBox {
             Button {
                 text: qsTr("Save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-                enabled: nsTitle.text.trim() !== ""
+                enabled: nsTitle.text.trim() !== "" &&
+                         nsAsA.text.trim() !== "" &&
+                         nsIWant.text.trim() !== "" &&
+                         nsSoThat.text.trim() !== "" &&
+                         nsCriterion.text.trim() !== ""
                 onClicked: {
                     workspace.createStory(nsTitle.text.trim(),
                                           nsAsA.text.trim(),
                                           nsIWant.text.trim(),
-                                          nsSoThat.text.trim())
+                                          nsSoThat.text.trim(),
+                                          nsCriterion.text.trim())
                     if (workspace.lastError === "") newStoryDialog.close()
                 }
             }

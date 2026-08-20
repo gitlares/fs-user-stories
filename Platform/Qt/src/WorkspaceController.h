@@ -55,11 +55,13 @@ public:
                                    const QString &statusFilter = QString(),
                                    const QString &profileFilter = QString());
     Q_INVOKABLE void refreshCurrent();
+    Q_INVOKABLE void addActor(const QString &name, const QString &role);
 
     Q_INVOKABLE void createStory(const QString &title,
                                  const QString &asA,
                                  const QString &iWant,
-                                 const QString &soThat);
+                                 const QString &soThat,
+                                 const QString &acceptanceCriterion);
     Q_INVOKABLE void updateStory(const QString &storyId,
                                  const QVariantMap &fields);
     Q_INVOKABLE void deleteStory(const QString &storyId);

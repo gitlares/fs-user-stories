@@ -186,23 +186,86 @@ void WorkspaceController::refreshCurrent()
     searchCurrent({}, {}, {});
 }
 
+void WorkspaceController::addActor(const QString &name, const QString &role)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open a project before adding a profile."));
+        return;
+    }
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "apply_stored_workspace_command"},
+        {"database_path", m_databasePath},
+        {"project_id", m_currentProjectId},
+        {"operation", "add_actor"},
+        {"name", name},
+        {"role", role},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return;
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (!project.isEmpty()) {
+        m_currentProject = project;
+        applyProject(project);
+    }
+}
+
 void WorkspaceController::createStory(const QString &title,
                                       const QString &asA,
                                       const QString &iWant,
-                                      const QString &soThat)
+                                      const QString &soThat,
+                                      const QString &acceptanceCriterion)
 {
     if (!m_client || m_currentProjectId.isEmpty()) {
         return;
     }
+
+    setError({});
+    QString actorId;
+    const QString actorName = asA.trimmed();
+    for (const QVariant &actorValue : m_currentProject.value("actors").toList()) {
+        const QVariantMap actor = actorValue.toMap();
+        if (actor.value("name").toString().compare(actorName, Qt::CaseInsensitive) == 0) {
+            actorId = actor.value("id").toString();
+            break;
+        }
+    }
+    if (actorId.isEmpty()) {
+        addActor(actorName, QString());
+        if (!m_lastError.isEmpty()) {
+            return;
+        }
+        for (const QVariant &actorValue : m_currentProject.value("actors").toList()) {
+            const QVariantMap actor = actorValue.toMap();
+            if (actor.value("name").toString().compare(actorName, Qt::CaseInsensitive) == 0) {
+                actorId = actor.value("id").toString();
+                break;
+            }
+        }
+    }
+    if (actorId.isEmpty()) {
+        setError(tr("The profile could not be created."));
+        return;
+    }
+
     QVariantMap command{
         {"command", "apply_stored_workspace_command"},
         {"database_path", m_databasePath},
         {"project_id", m_currentProjectId},
         {"operation", "add_story"},
         {"title", title},
-        {"asA", asA},
-        {"iWant", iWant},
-        {"soThat", soThat},
+        {"actor_id", actorId},
+        {"want", iWant},
+        {"outcome", soThat},
+        {"acceptance_criteria", QVariantList{
+            QVariantMap{{"id", QString()},
+                        {"text", acceptanceCriterion},
+                        {"isMet", false}}
+        }},
     };
     setBusy(true);
     const QVariantMap reply = runCommand(command);
@@ -213,6 +276,7 @@ void WorkspaceController::createStory(const QString &title,
     }
     const QVariantMap project = reply.value("result").toMap().value("project").toMap();
     if (!project.isEmpty()) {
+        m_currentProject = project;
         applyProject(project);
     }
     refreshCurrent();
