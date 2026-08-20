@@ -166,6 +166,23 @@ pub fn invite_collaborator(
             "Enter the collaborator's GitHub username (not an email address).".into(),
         ));
     }
+    let repository_info = api_request(
+        "GET",
+        &format!("{API_ROOT}/repos/{repository}"),
+        access_token,
+        json!({}),
+    )?;
+    ensure_status(&repository_info, &[200])?;
+    let can_manage = serde_json::from_slice::<Value>(&repository_info.body)
+        .ok()
+        .and_then(|value| value.get("permissions").cloned())
+        .and_then(|permissions| permissions.get("admin").and_then(Value::as_bool))
+        .unwrap_or(false);
+    if !can_manage {
+        return Err(CoreError::GitHubApi(
+            "No tienes permisos para invitar colaboradores. Debe hacerlo el propietario o un administrador del repositorio.".into(),
+        ));
+    }
     let response = api_request(
         "PUT",
         &format!("{API_ROOT}/repos/{repository}/collaborators/{username}"),

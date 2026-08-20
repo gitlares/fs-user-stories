@@ -12,9 +12,16 @@ Item {
     Rectangle { anchors.fill: parent; color: theme.window }
 
     ScrollView {
-        anchors.fill: parent; clip: true
+        anchors.fill: parent
+        clip: true
+        contentWidth: Math.max(480, availableWidth)
+        contentHeight: contentColumn.implicitHeight + 32
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
         ColumnLayout {
-            width: Math.max(480, root.width - 40); x: 20; y: 16; spacing: 16
+            id: contentColumn
+            width: Math.max(480, root.width - 40)
+            x: 20; y: 16; spacing: 16
             Label { text: qsTr("Share & Sync"); font.pixelSize: 24; font.weight: Font.DemiBold }
             Label {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; color: theme.secondaryText
