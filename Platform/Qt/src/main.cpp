@@ -17,6 +17,8 @@
 #include <QTextStream>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QSystemTrayIcon>
+#include <QMenu>
 
 #include "AppInfo.h"
 #include "CoreClient.h"
@@ -84,10 +86,17 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationVersion(AppInfo::version());
 
     QApplication app(argc, argv);
-    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("fs-user-stories")));
+    const bool smokeTest = app.arguments().contains(QStringLiteral("--smoke-test"));
+    const bool keepRunningInTray = !smokeTest && QSystemTrayIcon::isSystemTrayAvailable();
+    const QString appIconPath = QCoreApplication::applicationDirPath()
+        + QStringLiteral("/resources/app-icon.png");
+    const QIcon appIcon = QFile::exists(appIconPath)
+        ? QIcon(appIconPath)
+        : QIcon::fromTheme(QStringLiteral("fs-user-stories"));
+    QApplication::setWindowIcon(appIcon);
 
     QFile diagnosticFile;
-    if (app.arguments().contains(QStringLiteral("--smoke-test"))) {
+    if (smokeTest) {
         const QString diagnosticPath =
             qEnvironmentVariable("FS_USER_STORIES_DIAGNOSTICS");
         if (!diagnosticPath.isEmpty()) {
@@ -180,7 +189,7 @@ int main(int argc, char *argv[])
     controller.setCoreClient(std::move(client), corePath);
 
     QProcess *mcpServer = nullptr;
-    if (!app.arguments().contains(QStringLiteral("--smoke-test"))) {
+    if (!smokeTest) {
         mcpServer = new QProcess(&app);
         QObject::connect(mcpServer, &QProcess::stateChanged, &controller,
                          [&controller](QProcess::ProcessState state) {
@@ -222,6 +231,8 @@ int main(int argc, char *argv[])
             {"name", AppInfo::name()},
             {"version", AppInfo::version()},
             {"corePath", corePath},
+            {"smokeTest", smokeTest},
+            {"keepRunningInTray", keepRunningInTray},
         });
     engine.rootContext()->setContextProperty("appIconFont", iconFontFamily);
     engine.rootContext()->setContextProperty("appIcons", QString());
@@ -229,6 +240,37 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "QML did not create the application window";
         return 1;
+    }
+
+
+    std::unique_ptr<QSystemTrayIcon> trayIcon;
+    std::unique_ptr<QMenu> trayMenu;
+    if (keepRunningInTray) {
+        app.setQuitOnLastWindowClosed(false);
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+        trayMenu = std::make_unique<QMenu>();
+        QAction *openAction = trayMenu->addAction(QObject::tr("Open FS User Stories"));
+        trayMenu->addSeparator();
+        QAction *quitAction = trayMenu->addAction(QObject::tr("Quit FS User Stories"));
+        const auto showWindow = [window]() {
+            if (!window) return;
+            window->show();
+            window->raise();
+            window->requestActivate();
+        };
+        QObject::connect(openAction, &QAction::triggered, &app, showWindow);
+        QObject::connect(quitAction, &QAction::triggered, &app, &QCoreApplication::quit);
+        trayIcon = std::make_unique<QSystemTrayIcon>(appIcon, &app);
+        trayIcon->setToolTip(AppInfo::name());
+        trayIcon->setContextMenu(trayMenu.get());
+        QObject::connect(trayIcon.get(), &QSystemTrayIcon::activated, &app,
+                         [showWindow](QSystemTrayIcon::ActivationReason reason) {
+                             if (reason == QSystemTrayIcon::Trigger
+                                 || reason == QSystemTrayIcon::DoubleClick) {
+                                 showWindow();
+                             }
+                         });
+        trayIcon->show();
     }
 
     const QString screenshotPath = qEnvironmentVariable("FS_USER_STORIES_SCREENSHOT");
@@ -251,7 +293,7 @@ int main(int argc, char *argv[])
     // point proves that Windows loaded the executable and its runtime DLLs,
     // the QML module was found, and Component.onCompleted reached the Rust
     // core-backed workspace load without reporting an error.
-    if (app.arguments().contains(QStringLiteral("--smoke-test"))) {
+    if (smokeTest) {
         if (!controller.lastError().isEmpty()) {
             qCritical().noquote() << "Smoke test failed:" << controller.lastError();
             return 2;

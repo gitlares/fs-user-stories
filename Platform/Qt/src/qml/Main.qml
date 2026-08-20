@@ -16,6 +16,13 @@ ApplicationWindow {
     visible: true
     color: theme.window
 
+    onClosing: function(close) {
+        if (appInfo.keepRunningInTray) {
+            close.accepted = false
+            window.hide()
+        }
+    }
+
     // Reusable icon label style — Material Symbols Outlined (variable font,
     // weight axis 100-700). We pick 500 ("Demibold") because macs SF Symbols
     // default look heavier than weight 100. PixelSize matches the mac toolbar

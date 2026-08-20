@@ -28,8 +28,8 @@ RequestExecutionLevel user
 !include "MUI2.nsh"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON   "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_ICON   "${__FILEDIR__}\..\Platform\Qt\resources\fs-user-stories.ico"
+!define MUI_UNICON "${__FILEDIR__}\..\Platform\Qt\resources\fs-user-stories.ico"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\fs-user-stories.exe"
 
 !insertmacro MUI_PAGE_WELCOME
@@ -61,6 +61,8 @@ Section "Install"
                "Publisher" "${PUBLISHER}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+               "DisplayIcon" "$INSTDIR\fs-user-stories.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
 SectionEnd

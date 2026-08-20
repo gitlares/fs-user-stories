@@ -57,6 +57,11 @@ set(FS_USER_STORIES_SOURCES
 
 qt_add_executable(FSUserStories ${FS_USER_STORIES_SOURCES})
 
+if(WIN32)
+    enable_language(RC)
+    target_sources(FSUserStories PRIVATE resources/windows-icon.rc)
+endif()
+
 set_target_properties(FSUserStories PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE FALSE
@@ -111,6 +116,9 @@ add_custom_command(TARGET FSUserStories POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts/InterVariable.ttf"
             "$<TARGET_FILE_DIR:FSUserStories>/resources/fonts/"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../Design/AppIcon-master.png"
+            "$<TARGET_FILE_DIR:FSUserStories>/resources/app-icon.png"
 )
 
 target_include_directories(FSUserStories PRIVATE src)

@@ -49,6 +49,11 @@ $fontsDir = Join-Path $stageDir "resources/fonts"
 New-Item -ItemType Directory -Force -Path $fontsDir | Out-Null
 Copy-Item -Path (Join-Path $qtSrcDir "resources/fonts/MaterialSymbolsOutlined-Variable.ttf") `
             -Destination $fontsDir
+Copy-Item -Path (Join-Path $qtSrcDir "resources/fonts/InterVariable.ttf") `
+            -Destination $fontsDir
+$resourcesDir = Join-Path $stageDir "resources"
+Copy-Item -Path (Join-Path $projectRoot "Design/AppIcon-master.png") `
+            -Destination (Join-Path $resourcesDir "app-icon.png")
 
 # 2c. Bundle the Visual C++ runtime DLLs (vcruntime140, msvcp140, …).
 #     Without these, fs-user-stories.exe fails to launch on a Windows install
