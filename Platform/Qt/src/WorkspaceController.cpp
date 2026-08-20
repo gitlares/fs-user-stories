@@ -492,14 +492,60 @@ void WorkspaceController::synchronize()
         if (errorValue.value("code").toString() == QLatin1String("sync_conflicts")) {
             const QVariantList conflicts =
                 errorValue.value("details").toMap().value("conflicts").toList();
+            m_pendingSyncConflicts = conflicts;
+            emit pendingSyncConflictsChanged();
             emit syncConflicts(conflicts);
             return;
         }
         setError(errorValue.value("message").toString());
         return;
     }
+    if (!m_pendingSyncConflicts.isEmpty()) {
+        m_pendingSyncConflicts.clear();
+        emit pendingSyncConflictsChanged();
+    }
     emit info(tr("Project synchronized."));
     refreshCurrent();
+}
+
+bool WorkspaceController::resolveSynchronization(const QVariantList &resolutions)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open the conflicted project first."));
+        return false;
+    }
+    if (m_pendingSyncConflicts.isEmpty()
+        || resolutions.size() != m_pendingSyncConflicts.size()) {
+        setError(tr("Choose your version or the shared version for every conflict."));
+        return false;
+    }
+    if (m_accessToken.isEmpty()) {
+        m_accessToken = CredentialStore::readGitHubToken();
+    }
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "resolve_stored_project_synchronization"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"project_id", m_currentProjectId},
+        {"resolutions", resolutions},
+        {"access_token", m_accessToken.isEmpty() ? QVariant() : QVariant(m_accessToken)},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return false;
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (!project.isEmpty()) {
+        applyProject(project);
+    }
+    m_pendingSyncConflicts.clear();
+    emit pendingSyncConflictsChanged();
+    emit info(tr("Synchronization conflicts resolved."));
+    refreshCurrent();
+    return true;
 }
 
 void WorkspaceController::initializeRepository()
@@ -564,6 +610,133 @@ void WorkspaceController::connectRepository(const QString &remoteUrl)
     emit info(tr("Remote repository connected."));
 }
 
+bool WorkspaceController::createPrivateGitHubRepository()
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open a project before creating its GitHub repository."));
+        return false;
+    }
+    if (!m_currentProject.value("gitRepository").toMap().value("remoteUrl").toString().isEmpty()) {
+        setError(tr("This project already has a remote repository."));
+        return false;
+    }
+    if (m_currentProject.value("gitRepository").toMap().isEmpty()) {
+        initializeRepository();
+        if (!m_lastError.isEmpty()) {
+            return false;
+        }
+    }
+    if (m_accessToken.isEmpty()) {
+        m_accessToken = CredentialStore::readGitHubToken();
+    }
+    if (!m_accessToken.isEmpty()) {
+        return createPrivateGitHubRepositoryWithToken(m_accessToken);
+    }
+
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "github_begin_authorization"},
+        {"client_id", QString::fromLatin1(kGitHubOAuthClientId)},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return false;
+    }
+    m_pendingAuthorization = reply.value("result").toMap();
+    m_pendingGitHubCreation = true;
+    if (githubAuthorizationCode().isEmpty() || githubAuthorizationUrl().isEmpty()) {
+        cancelInvitationAuthorization();
+        setError(tr("GitHub returned an incomplete authorization response."));
+        return false;
+    }
+    emit githubAuthorizationChanged();
+    QGuiApplication::clipboard()->setText(githubAuthorizationCode());
+    QDesktopServices::openUrl(QUrl(githubAuthorizationUrl()));
+    emit info(tr("The GitHub code was copied. Authorize it in the browser, then choose Continue."));
+    return false;
+}
+
+bool WorkspaceController::finishGitHubRepositoryCreation()
+{
+    if (!m_pendingGitHubCreation) {
+        setError(tr("Start GitHub repository creation first."));
+        return false;
+    }
+    QString accessToken;
+    if (!finishGitHubAuthorization(&accessToken)) {
+        return false;
+    }
+    cancelInvitationAuthorization();
+    return createPrivateGitHubRepositoryWithToken(accessToken);
+}
+
+bool WorkspaceController::createPrivateGitHubRepositoryWithToken(const QString &accessToken)
+{
+    setError({});
+    setBusy(true);
+    const QVariantMap createReply = runCommand({
+        {"command", "github_create_private_repository"},
+        {"name", m_currentProject.value("name").toString()},
+        {"access_token", accessToken},
+    });
+    setBusy(false);
+    if (!createReply.value("ok").toBool()) {
+        setError(createReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+    const QVariantMap repository = createReply.value("result").toMap();
+    const QString cloneUrl = repository.value("cloneUrl").toString();
+    if (cloneUrl.isEmpty()) {
+        setError(tr("GitHub created the repository but returned no clone URL."));
+        return false;
+    }
+    connectRepository(cloneUrl);
+    if (!m_lastError.isEmpty()) {
+        return false;
+    }
+    synchronize();
+    if (!m_lastError.isEmpty()) {
+        return false;
+    }
+    emit info(tr("Private GitHub repository created and synchronized."));
+    return true;
+}
+
+bool WorkspaceController::inviteGitHubCollaborator(const QString &username)
+{
+    const QString collaborator = username.trimmed();
+    const QString remoteUrl = m_currentProject.value("gitRepository").toMap()
+                                  .value("remoteUrl").toString();
+    if (collaborator.isEmpty() || remoteUrl.isEmpty()) {
+        setError(tr("Enter a GitHub username after connecting the repository."));
+        return false;
+    }
+    if (m_accessToken.isEmpty()) {
+        m_accessToken = CredentialStore::readGitHubToken();
+    }
+    if (m_accessToken.isEmpty()) {
+        setError(tr("Authorize GitHub by creating the private repository in this app first."));
+        return false;
+    }
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "github_invite_collaborator"},
+        {"username", collaborator},
+        {"repository_url", remoteUrl},
+        {"access_token", m_accessToken},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return false;
+    }
+    emit info(tr("GitHub invitation sent to %1.").arg(collaborator));
+    return true;
+}
+
 QString WorkspaceController::createInvitation()
 {
     const QVariantMap repository = m_currentProject.value("gitRepository").toMap();
@@ -584,7 +757,12 @@ QString WorkspaceController::createInvitation()
         setError(reply.value("error").toMap().value("message").toString());
         return {};
     }
-    return reply.value("result").toMap().value("invitation").toString();
+    const QString invitation = reply.value("result").toMap().value("invitation").toString();
+    if (!invitation.isEmpty()) {
+        QGuiApplication::clipboard()->setText(invitation);
+        emit info(tr("Invitation code copied to the clipboard."));
+    }
+    return invitation;
 }
 
 bool WorkspaceController::acceptInvitation(const QString &invitationToken)
@@ -666,40 +844,53 @@ bool WorkspaceController::acceptInvitation(const QString &invitationToken)
 
 bool WorkspaceController::finishInvitationAuthorization()
 {
+    if (m_pendingGitHubCreation) {
+        setError(tr("Continue GitHub repository creation from Share & Sync."));
+        return false;
+    }
     if (m_pendingAuthorization.isEmpty() || m_pendingRemoteUrl.isEmpty()) {
         setError(tr("Start the invitation again to authorize GitHub."));
         return false;
     }
 
+    QString accessToken;
+    if (!finishGitHubAuthorization(&accessToken)) {
+        return false;
+    }
+    const QString remoteUrl = m_pendingRemoteUrl;
+    cancelInvitationAuthorization();
+    return joinInvitationRemote(remoteUrl, accessToken);
+}
+
+bool WorkspaceController::finishGitHubAuthorization(QString *accessToken)
+{
     setError({});
     setBusy(true);
-    const QVariantMap authorizationReply = runCommand({
+    const QVariantMap reply = runCommand({
         {"command", "github_finish_authorization"},
         {"client_id", QString::fromLatin1(kGitHubOAuthClientId)},
         {"authorization", m_pendingAuthorization},
     });
     setBusy(false);
-    if (!authorizationReply.value("ok").toBool()) {
-        setError(authorizationReply.value("error").toMap().value("message").toString());
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
         return false;
     }
-
-    const QString accessToken =
-        authorizationReply.value("result").toMap().value("accessToken").toString();
-    if (accessToken.isEmpty()) {
+    const QString token = reply.value("result").toMap().value("accessToken").toString();
+    if (token.isEmpty()) {
         setError(tr("GitHub authorized the app but returned no access token."));
         return false;
     }
-
-    m_accessToken = accessToken;
+    m_accessToken = token;
     QString credentialError;
-    if (!CredentialStore::writeGitHubToken(m_accessToken, &credentialError)) {
+    if (!CredentialStore::writeGitHubToken(token, &credentialError)) {
         emit info(tr("GitHub was authorized, but the token could not be saved securely: %1")
                   .arg(credentialError));
     }
-    const QString remoteUrl = m_pendingRemoteUrl;
-    cancelInvitationAuthorization();
-    return joinInvitationRemote(remoteUrl, m_accessToken);
+    if (accessToken) {
+        *accessToken = token;
+    }
+    return true;
 }
 
 void WorkspaceController::cancelInvitationAuthorization()
@@ -709,6 +900,7 @@ void WorkspaceController::cancelInvitationAuthorization()
     }
     m_pendingAuthorization.clear();
     m_pendingRemoteUrl.clear();
+    m_pendingGitHubCreation = false;
     emit githubAuthorizationChanged();
 }
 

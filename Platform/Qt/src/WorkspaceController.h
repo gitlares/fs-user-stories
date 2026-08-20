@@ -29,8 +29,10 @@ class WorkspaceController : public QObject
     Q_PROPERTY(QString githubAuthorizationCode READ githubAuthorizationCode NOTIFY githubAuthorizationChanged)
     Q_PROPERTY(QString githubAuthorizationUrl READ githubAuthorizationUrl NOTIFY githubAuthorizationChanged)
     Q_PROPERTY(bool githubAuthorizationPending READ githubAuthorizationPending NOTIFY githubAuthorizationChanged)
+    Q_PROPERTY(bool githubAuthorizationForRepositoryCreation READ githubAuthorizationForRepositoryCreation NOTIFY githubAuthorizationChanged)
     Q_PROPERTY(bool mcpServerActive READ mcpServerActive NOTIFY mcpServerStateChanged)
     Q_PROPERTY(QString mcpServerUrl READ mcpServerUrl CONSTANT)
+    Q_PROPERTY(QVariantList pendingSyncConflicts READ pendingSyncConflicts NOTIFY pendingSyncConflictsChanged)
 
 public:
     explicit WorkspaceController(QObject *parent = nullptr);
@@ -52,8 +54,10 @@ public:
     QString githubAuthorizationCode() const;
     QString githubAuthorizationUrl() const;
     bool githubAuthorizationPending() const { return !m_pendingAuthorization.isEmpty(); }
+    bool githubAuthorizationForRepositoryCreation() const { return m_pendingGitHubCreation; }
     bool mcpServerActive() const { return m_mcpServerActive; }
     QString mcpServerUrl() const { return QStringLiteral("http://127.0.0.1:49231/mcp"); }
+    QVariantList pendingSyncConflicts() const { return m_pendingSyncConflicts; }
     void setMcpServerActive(bool active);
 
     Q_INVOKABLE void load();
@@ -98,8 +102,12 @@ public:
     Q_INVOKABLE void deleteStory(const QString &storyId);
 
     Q_INVOKABLE void synchronize();
+    Q_INVOKABLE bool resolveSynchronization(const QVariantList &resolutions);
     Q_INVOKABLE void initializeRepository();
     Q_INVOKABLE void connectRepository(const QString &remoteUrl);
+    Q_INVOKABLE bool createPrivateGitHubRepository();
+    Q_INVOKABLE bool finishGitHubRepositoryCreation();
+    Q_INVOKABLE bool inviteGitHubCollaborator(const QString &username);
     Q_INVOKABLE QString createInvitation();
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
@@ -118,6 +126,7 @@ signals:
     void lastErrorChanged();
     void info(const QString &message);
     void syncConflicts(const QVariantList &conflicts);
+    void pendingSyncConflictsChanged();
     void githubAuthorizationChanged();
     void mcpServerStateChanged();
 
@@ -129,6 +138,8 @@ private:
     bool applyCurrentOperation(QVariantMap operation);
     bool joinInvitationRemote(const QString &remoteUrl,
                               const QString &accessToken = QString());
+    bool createPrivateGitHubRepositoryWithToken(const QString &accessToken);
+    bool finishGitHubAuthorization(QString *accessToken);
 
     std::unique_ptr<CoreClient> m_client;
     QString m_corePath;
@@ -138,8 +149,10 @@ private:
     QVariantList m_projects;
     QString m_currentProjectId;
     QVariantMap m_currentProject;
+    QVariantList m_pendingSyncConflicts;
     QVariantMap m_pendingAuthorization;
     QString m_pendingRemoteUrl;
+    bool m_pendingGitHubCreation = false;
     QString m_accessToken;
     StoryModel *m_storyModel = nullptr;
     bool m_busy = false;
