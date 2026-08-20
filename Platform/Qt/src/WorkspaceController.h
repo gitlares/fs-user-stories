@@ -17,6 +17,8 @@ class WorkspaceController : public QObject
     Q_OBJECT
     Q_PROPERTY(QVariantList projects READ projects NOTIFY projectsChanged)
     Q_PROPERTY(QString currentProjectId READ currentProjectId NOTIFY currentProjectChanged)
+    Q_PROPERTY(QVariantMap currentProject READ currentProject NOTIFY currentProjectChanged)
+    Q_PROPERTY(QVariantList currentActors READ currentActors NOTIFY currentProjectChanged)
     Q_PROPERTY(QObject* currentStoryModel READ currentStoryModel CONSTANT)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -36,6 +38,8 @@ public:
 
     QVariantList projects() const { return m_projects; }
     QString currentProjectId() const { return m_currentProjectId; }
+    QVariantMap currentProject() const { return m_currentProject; }
+    QVariantList currentActors() const { return m_currentProject.value("actors").toList(); }
     QObject *currentStoryModel() const;
     bool busy() const { return m_busy; }
     QString lastError() const { return m_lastError; }
@@ -49,6 +53,7 @@ public:
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void createProject(const QString &name, const QString &prefix);
+    Q_INVOKABLE void updateProject(const QString &name, const QString &prefix);
     Q_INVOKABLE void deleteProject(const QString &projectId);
     Q_INVOKABLE void openProject(const QString &projectId);
     Q_INVOKABLE void searchCurrent(const QString &query,
@@ -56,6 +61,10 @@ public:
                                    const QString &profileFilter = QString());
     Q_INVOKABLE void refreshCurrent();
     Q_INVOKABLE void addActor(const QString &name, const QString &role);
+    Q_INVOKABLE void updateActor(const QString &actorId,
+                                 const QString &name,
+                                 const QString &role);
+    Q_INVOKABLE void deleteActor(const QString &actorId);
 
     Q_INVOKABLE void createStory(const QString &title,
                                  const QString &asA,
@@ -63,10 +72,30 @@ public:
                                  const QString &soThat,
                                  const QString &acceptanceCriterion);
     Q_INVOKABLE void updateStory(const QString &storyId,
-                                 const QVariantMap &fields);
+                                 const QString &title,
+                                 const QString &actorId,
+                                 const QString &want,
+                                 const QString &outcome,
+                                 const QVariantList &acceptanceCriteria);
+    Q_INVOKABLE void duplicateStory(const QString &storyId, const QString &copyTitle);
+    Q_INVOKABLE void setStoryStatus(const QString &storyId, const QString &status);
+    Q_INVOKABLE void updateStoryNotes(const QString &storyId, const QString &notes);
+    Q_INVOKABLE void toggleAcceptanceCriterion(const QString &storyId,
+                                               const QString &criterionId);
+    Q_INVOKABLE void addAcceptanceCriterion(const QString &storyId, const QString &text);
+    Q_INVOKABLE void deleteAcceptanceCriterion(const QString &storyId,
+                                               const QString &criterionId);
+    Q_INVOKABLE void importAttachments(const QString &storyId,
+                                       const QVariantList &sourceFiles);
+    Q_INVOKABLE void removeAttachment(const QString &storyId,
+                                      const QString &attachmentId);
+    Q_INVOKABLE void openAttachment(const QString &relativePath);
     Q_INVOKABLE void deleteStory(const QString &storyId);
 
     Q_INVOKABLE void synchronize();
+    Q_INVOKABLE void initializeRepository();
+    Q_INVOKABLE void connectRepository(const QString &remoteUrl);
+    Q_INVOKABLE QString createInvitation();
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
 
@@ -90,6 +119,7 @@ private:
     void setError(const QString &message);
     QVariantMap runCommand(const QVariantMap &command);
     void applyProject(const QVariantMap &project);
+    bool applyCurrentOperation(QVariantMap operation);
     bool joinInvitationRemote(const QString &remoteUrl,
                               const QString &accessToken = QString());
 

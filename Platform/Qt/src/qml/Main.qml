@@ -92,7 +92,7 @@ ApplicationWindow {
                 ToolTip.text: qsTr("Synchronize with Git")
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
-                onClicked: workspace.synchronize()
+                onClicked: gitDialog.open()
             }
             ToolButton {
                 contentItem: IconLabel { text: "refresh" }
@@ -103,6 +103,7 @@ ApplicationWindow {
             }
             ToolButton {
                 visible: workspace.currentProjectId !== ""
+                enabled: workspace.currentActors.length > 0
                 contentItem: IconLabel { text: "person_add" }
                 ToolTip.text: qsTr("Add Profile")
                 ToolTip.visible: hovered
@@ -127,11 +128,23 @@ ApplicationWindow {
                     id: moreMenu
                     MenuItem {
                         text: qsTr("Export to Markdown…")
-                        onTriggered: workspace.exportMarkdown(exportDialog.selectedFile)
+                        enabled: workspace.currentProjectId !== ""
+                        onTriggered: exportDialog.open()
                     }
                     MenuItem {
                         text: qsTr("Import from Markdown…")
-                        onTriggered: workspace.importMarkdown(importDialog.selectedFile)
+                        enabled: workspace.currentProjectId !== ""
+                        onTriggered: importDialog.open()
+                    }
+                    MenuSeparator {}
+                    MenuItem {
+                        text: qsTr("Edit Project…")
+                        enabled: workspace.currentProjectId !== ""
+                        onTriggered: {
+                            epName.text = workspace.currentProject.name || ""
+                            epPrefix.text = workspace.currentProject.prefix || ""
+                            editProjectDialog.open()
+                        }
                     }
                     MenuSeparator {}
                     MenuItem {
@@ -191,6 +204,7 @@ ApplicationWindow {
         title: qsTr("About FS User Stories")
         modal: true
         anchors.centerIn: parent
+        width: 520
         contentItem: ColumnLayout {
             spacing: 6
             Label { text: appInfo.name; font.bold: true; font.pixelSize: 18 }
@@ -341,8 +355,13 @@ ApplicationWindow {
             spacing: 6
             Label { text: qsTr("Title") }
             TextField { id: nsTitle; Layout.fillWidth: true }
-            Label { text: qsTr("As a") }
-            TextField { id: nsAsA; Layout.fillWidth: true }
+            Label { text: qsTr("Actor") }
+            ComboBox {
+                id: nsActor
+                Layout.fillWidth: true
+                model: workspace.currentActors
+                textRole: "name"
+            }
             Label { text: qsTr("I want") }
             TextField { id: nsIWant; Layout.fillWidth: true }
             Label { text: qsTr("So that") }
@@ -358,13 +377,13 @@ ApplicationWindow {
             Button {
                 text: qsTr("Save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 enabled: nsTitle.text.trim() !== "" &&
-                         nsAsA.text.trim() !== "" &&
+                         nsActor.currentIndex >= 0 &&
                          nsIWant.text.trim() !== "" &&
                          nsSoThat.text.trim() !== "" &&
                          nsCriterion.text.trim() !== ""
                 onClicked: {
                     workspace.createStory(nsTitle.text.trim(),
-                                          nsAsA.text.trim(),
+                                          workspace.currentActors[nsActor.currentIndex].name,
                                           nsIWant.text.trim(),
                                           nsSoThat.text.trim(),
                                           nsCriterion.text.trim())
@@ -378,16 +397,51 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: editProjectDialog
+        title: qsTr("Edit Project")
+        modal: true; anchors.centerIn: parent; width: 420
+        contentItem: ColumnLayout {
+            Label { text: qsTr("Project name") }
+            TextField { id: epName; Layout.fillWidth: true }
+            Label { text: qsTr("Story prefix") }
+            TextField { id: epPrefix; Layout.fillWidth: true }
+        }
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Delete"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole
+                onClicked: { workspace.deleteProject(workspace.currentProjectId); if (workspace.lastError === "") editProjectDialog.close() }
+            }
+            Button {
+                text: qsTr("Save"); enabled: epName.text.trim() !== "" && epPrefix.text.trim() !== ""
+                onClicked: { workspace.updateProject(epName.text.trim(), epPrefix.text.trim().toUpperCase()); if (workspace.lastError === "") editProjectDialog.close() }
+            }
+            Button { text: qsTr("Cancel"); onClicked: editProjectDialog.close() }
+        }
+    }
+
+    Dialog {
+        id: gitDialog
+        title: qsTr("Git Sharing")
+        modal: true; anchors.centerIn: parent; width: 620; height: 520
+        contentItem: GitSyncView { anchors.fill: parent }
+        footer: DialogButtonBox {
+            Button { text: qsTr("Close"); onClicked: gitDialog.close() }
+        }
+    }
+
     FileDialog {
         id: exportDialog
         fileMode: FileDialog.SaveFile
         title: qsTr("Export stories to Markdown")
         nameFilters: ["Markdown files (*.md)"]
+        onAccepted: workspace.exportMarkdown(selectedFile)
     }
     FileDialog {
         id: importDialog
         fileMode: FileDialog.OpenFile
         title: qsTr("Import stories from Markdown")
         nameFilters: ["Markdown files (*.md)"]
+        onAccepted: workspace.importMarkdown(selectedFile)
     }
 }

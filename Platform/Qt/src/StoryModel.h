@@ -23,6 +23,8 @@ public:
         CriteriaRole,
         NotesRole,
         UpdatedAtRole,
+        AttachmentsRole,
+        NumberRole,
     };
 
     explicit StoryModel(QObject *parent = nullptr);

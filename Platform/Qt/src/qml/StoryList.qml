@@ -6,6 +6,7 @@ import QtQuick.Layouts
 Item {
     id: root
     signal storySelected(var story)
+    property bool showProfiles: false
 
     component IconLabel: Label {
         font.family: appIconFont
@@ -41,8 +42,8 @@ Item {
                         spacing: 0
                         Repeater {
                             model: [
-                                { label: qsTr("Stories"),  icon: "book",   active: true  },
-                                { label: qsTr("Profiles"), icon: "group",  active: false }
+                                { label: qsTr("Stories"),  icon: "book" },
+                                { label: qsTr("Profiles"), icon: "group" }
                             ]
                             delegate: ItemDelegate {
                                 Layout.fillWidth: true
@@ -51,8 +52,8 @@ Item {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: 14
-                                    color: modelData.active ? palette.base : "transparent"
-                                    border.color: modelData.active ? palette.mid : "transparent"
+                                    color: (index === 1) === root.showProfiles ? palette.base : "transparent"
+                                    border.color: (index === 1) === root.showProfiles ? palette.mid : "transparent"
                                     border.width: 0.5
                                 }
                                 RowLayout {
@@ -62,10 +63,10 @@ Item {
                                     Label {
                                         text: modelData.label
                                         font.pixelSize: 13
-                                        font.weight: modelData.active ? Font.DemiBold : Font.Normal
+                                        font.weight: (index === 1) === root.showProfiles ? Font.DemiBold : Font.Normal
                                     }
                                 }
-                                onClicked: /* toggle - placeholder */ { }
+                                onClicked: root.showProfiles = index === 1
                             }
                         }
                     }
@@ -194,7 +195,10 @@ Item {
                         soThat:   model.soThat,
                         status:   model.status,
                         notes:    model.notes,
-                        criteria: model.criteria
+                        criteria: model.criteria,
+                        actorId: model.profileId,
+                        attachments: model.attachments,
+                        number: model.number
                     })
                 }
             }
@@ -211,5 +215,15 @@ Item {
         }
 
         function clearSelection() { list.currentIndex = -1 }
+    }
+
+    ProjectProfilesView {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.topMargin: 58
+        visible: root.showProfiles
+        z: 10
     }
 }

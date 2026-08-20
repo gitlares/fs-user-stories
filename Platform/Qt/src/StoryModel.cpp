@@ -44,6 +44,8 @@ QVariant StoryModel::data(const QModelIndex &index, int role) const
     case CriteriaRole:  return story.value("acceptanceCriteria");
     case NotesRole:     return story.value("notes");
     case UpdatedAtRole: return story.value("createdAt");
+    case AttachmentsRole:return story.value("attachments");
+    case NumberRole:     return story.value("number");
     }
     return {};
 }
@@ -61,6 +63,8 @@ QHash<int, QByteArray> StoryModel::roleNames() const
         {CriteriaRole,  "criteria"},
         {NotesRole,     "notes"},
         {UpdatedAtRole, "updatedAt"},
+        {AttachmentsRole,"attachments"},
+        {NumberRole,     "number"},
     };
 }
 

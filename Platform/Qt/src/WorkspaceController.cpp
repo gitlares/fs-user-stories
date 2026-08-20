@@ -5,7 +5,9 @@
 #include "CredentialStore.h"
 #include "StoryModel.h"
 
+#include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QDesktopServices>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -106,6 +108,15 @@ void WorkspaceController::createProject(const QString &name, const QString &pref
     load();
 }
 
+void WorkspaceController::updateProject(const QString &name, const QString &prefix)
+{
+    applyCurrentOperation({
+        {"operation", "update_project"},
+        {"name", name},
+        {"prefix", prefix},
+    });
+}
+
 void WorkspaceController::deleteProject(const QString &projectId)
 {
     if (!m_client) {
@@ -159,12 +170,16 @@ void WorkspaceController::searchCurrent(const QString &query,
     }
     QVariantMap searchQuery{
         {"text", query},
+        {"projectId", m_currentProjectId},
     };
-    if (!statusFilter.isEmpty()) {
-        searchQuery.insert("status", statusFilter);
+    const QString normalizedStatus = statusFilter.trimmed().toLower();
+    if (normalizedStatus == QLatin1String("active") ||
+        normalizedStatus == QLatin1String("draft") ||
+        normalizedStatus == QLatin1String("done")) {
+        searchQuery.insert("status", normalizedStatus);
     }
-    if (!profileFilter.isEmpty()) {
-        searchQuery.insert("profileId", profileFilter);
+    if (!profileFilter.isEmpty() && profileFilter != QLatin1String("all")) {
+        searchQuery.insert("actorId", profileFilter);
     }
 
     setBusy(true);
@@ -189,30 +204,31 @@ void WorkspaceController::refreshCurrent()
 
 void WorkspaceController::addActor(const QString &name, const QString &role)
 {
-    if (!m_client || m_currentProjectId.isEmpty()) {
-        setError(tr("Open a project before adding a profile."));
-        return;
-    }
-    setError({});
-    setBusy(true);
-    const QVariantMap reply = runCommand({
-        {"command", "apply_stored_workspace_command"},
-        {"database_path", m_databasePath},
-        {"project_id", m_currentProjectId},
+    applyCurrentOperation({
         {"operation", "add_actor"},
         {"name", name},
         {"role", role},
     });
-    setBusy(false);
-    if (!reply.value("ok").toBool()) {
-        setError(reply.value("error").toMap().value("message").toString());
-        return;
-    }
-    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
-    if (!project.isEmpty()) {
-        m_currentProject = project;
-        applyProject(project);
-    }
+}
+
+void WorkspaceController::updateActor(const QString &actorId,
+                                      const QString &name,
+                                      const QString &role)
+{
+    applyCurrentOperation({
+        {"operation", "update_actor"},
+        {"actor_id", actorId},
+        {"name", name},
+        {"role", role},
+    });
+}
+
+void WorkspaceController::deleteActor(const QString &actorId)
+{
+    applyCurrentOperation({
+        {"operation", "delete_actor"},
+        {"actor_id", actorId},
+    });
 }
 
 void WorkspaceController::createStory(const QString &title,
@@ -283,33 +299,148 @@ void WorkspaceController::createStory(const QString &title,
     refreshCurrent();
 }
 
-void WorkspaceController::updateStory(const QString &storyId, const QVariantMap &fields)
+void WorkspaceController::updateStory(const QString &storyId,
+                                      const QString &title,
+                                      const QString &actorId,
+                                      const QString &want,
+                                      const QString &outcome,
+                                      const QVariantList &acceptanceCriteria)
 {
-    if (!m_client || m_currentProjectId.isEmpty()) {
+    applyCurrentOperation({
+        {"operation", "update_story"},
+        {"story_id", storyId},
+        {"title", title},
+        {"actor_id", actorId},
+        {"want", want},
+        {"outcome", outcome},
+        {"acceptance_criteria", acceptanceCriteria},
+    });
+}
+
+void WorkspaceController::duplicateStory(const QString &storyId, const QString &copyTitle)
+{
+    applyCurrentOperation({
+        {"operation", "duplicate_story"},
+        {"story_id", storyId},
+        {"copy_title", copyTitle},
+    });
+}
+
+void WorkspaceController::setStoryStatus(const QString &storyId, const QString &status)
+{
+    applyCurrentOperation({
+        {"operation", "set_story_status"},
+        {"story_id", storyId},
+        {"status", status},
+    });
+}
+
+void WorkspaceController::updateStoryNotes(const QString &storyId, const QString &notes)
+{
+    applyCurrentOperation({
+        {"operation", "update_story_notes"},
+        {"story_id", storyId},
+        {"notes", notes},
+    });
+}
+
+void WorkspaceController::toggleAcceptanceCriterion(const QString &storyId,
+                                                    const QString &criterionId)
+{
+    applyCurrentOperation({
+        {"operation", "toggle_acceptance_criterion"},
+        {"story_id", storyId},
+        {"criterion_id", criterionId},
+    });
+}
+
+void WorkspaceController::addAcceptanceCriterion(const QString &storyId,
+                                                 const QString &text)
+{
+    applyCurrentOperation({
+        {"operation", "add_acceptance_criterion"},
+        {"story_id", storyId},
+        {"text", text},
+    });
+}
+
+void WorkspaceController::deleteAcceptanceCriterion(const QString &storyId,
+                                                    const QString &criterionId)
+{
+    applyCurrentOperation({
+        {"operation", "delete_acceptance_criterion"},
+        {"story_id", storyId},
+        {"criterion_id", criterionId},
+    });
+}
+
+void WorkspaceController::importAttachments(const QString &storyId,
+                                            const QVariantList &sourceFiles)
+{
+    if (!m_client || m_currentProjectId.isEmpty() || sourceFiles.isEmpty()) {
         return;
     }
-    QVariantMap command{
-        {"command", "apply_stored_workspace_command"},
-        {"database_path", m_databasePath},
-        {"project_id", m_currentProjectId},
-        {"operation", "update_story"},
-        {"storyId", storyId},
-    };
-    for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
-        command.insert(it.key(), it.value());
+    QVariantList sourcePaths;
+    for (const QVariant &sourceFile : sourceFiles) {
+        const QUrl url = sourceFile.toUrl();
+        sourcePaths.append(url.isLocalFile() ? url.toLocalFile() : sourceFile.toString());
     }
+    setError({});
     setBusy(true);
-    const QVariantMap reply = runCommand(command);
+    const QVariantMap reply = runCommand({
+        {"command", "import_stored_attachments"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"project_id", m_currentProjectId},
+        {"story_id", storyId},
+        {"source_paths", sourcePaths},
+    });
     setBusy(false);
     if (!reply.value("ok").toBool()) {
         setError(reply.value("error").toMap().value("message").toString());
         return;
     }
-    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
-    if (!project.isEmpty()) {
-        applyProject(project);
-    }
+    applyProject(reply.value("result").toMap().value("project").toMap());
     refreshCurrent();
+}
+
+void WorkspaceController::removeAttachment(const QString &storyId,
+                                           const QString &attachmentId)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        return;
+    }
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "remove_stored_attachment"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"project_id", m_currentProjectId},
+        {"story_id", storyId},
+        {"attachment_id", attachmentId},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return;
+    }
+    applyProject(reply.value("result").toMap().value("project").toMap());
+    refreshCurrent();
+}
+
+void WorkspaceController::openAttachment(const QString &relativePath)
+{
+    const QString root = QDir(m_attachmentsRoot).canonicalPath();
+    const QString path = QFileInfo(QDir(m_attachmentsRoot).filePath(relativePath)).canonicalFilePath();
+    if (path.isEmpty() || root.isEmpty() ||
+        !(path == root || path.startsWith(root + QDir::separator()))) {
+        setError(tr("The attachment path is invalid or the file no longer exists."));
+        return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path))) {
+        setError(tr("The attachment could not be opened."));
+    }
 }
 
 void WorkspaceController::deleteStory(const QString &storyId)
@@ -367,6 +498,91 @@ void WorkspaceController::synchronize()
     }
     emit info(tr("Project synchronized."));
     refreshCurrent();
+}
+
+void WorkspaceController::initializeRepository()
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open a project before enabling Git."));
+        return;
+    }
+    const QString repositoryPath =
+        QDir(m_repositoriesRoot).filePath(m_currentProjectId);
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "initialize_stored_project_repository"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"project_id", m_currentProjectId},
+        {"repository_path", repositoryPath},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return;
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (!project.isEmpty()) {
+        applyProject(project);
+    }
+    emit info(tr("Local Git repository initialized."));
+}
+
+void WorkspaceController::connectRepository(const QString &remoteUrl)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open a project before connecting a repository."));
+        return;
+    }
+    if (m_currentProject.value("gitRepository").toMap().isEmpty()) {
+        initializeRepository();
+        if (!m_lastError.isEmpty()) {
+            return;
+        }
+    }
+    setError({});
+    setBusy(true);
+    const QVariantMap reply = runCommand({
+        {"command", "connect_stored_project_repository"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"project_id", m_currentProjectId},
+        {"remote_url", remoteUrl.trimmed()},
+    });
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return;
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (!project.isEmpty()) {
+        applyProject(project);
+    }
+    emit info(tr("Remote repository connected."));
+}
+
+QString WorkspaceController::createInvitation()
+{
+    const QVariantMap repository = m_currentProject.value("gitRepository").toMap();
+    const QString remoteUrl = repository.value("remoteUrl").toString();
+    if (m_currentProjectId.isEmpty() || remoteUrl.isEmpty()) {
+        setError(tr("Connect and synchronize a remote repository first."));
+        return {};
+    }
+    setError({});
+    const QVariantMap reply = runCommand({
+        {"command", "create_invitation"},
+        {"project_id", m_currentProjectId},
+        {"project_name", m_currentProject.value("name").toString()},
+        {"remote_url", remoteUrl},
+        {"default_branch", repository.value("defaultBranch").toString()},
+    });
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return {};
+    }
+    return reply.value("result").toMap().value("invitation").toString();
 }
 
 bool WorkspaceController::acceptInvitation(const QString &invitationToken)
@@ -536,12 +752,44 @@ void WorkspaceController::exportMarkdown(const QUrl &targetFile)
         return;
     }
     const QString path = targetFile.isLocalFile() ? targetFile.toLocalFile() : targetFile.toString();
+    QVariantList portableStories;
+    const QString prefix = m_currentProject.value("prefix").toString();
+    for (const QVariant &storyValue : m_currentProject.value("stories").toList()) {
+        const QVariantMap story = storyValue.toMap();
+        const QString actorId = story.value("actorId").toString();
+        QVariantMap actor;
+        for (const QVariant &actorValue : m_currentProject.value("actors").toList()) {
+            if (actorValue.toMap().value("id").toString() == actorId) {
+                actor = actorValue.toMap();
+                break;
+            }
+        }
+        portableStories.append(QVariantMap{
+            {"id", story.value("id")},
+            {"originalReference", QStringLiteral("%1-%2").arg(prefix).arg(story.value("number").toInt())},
+            {"title", story.value("title")},
+            {"profileName", actor.value("name", tr("Unknown actor"))},
+            {"profileDescription", actor.value("role")},
+            {"want", story.value("want")},
+            {"outcome", story.value("outcome")},
+            {"notes", story.value("notes")},
+            {"acceptanceCriteria", story.value("acceptanceCriteria")},
+            {"status", story.value("status")},
+            {"createdAt", story.value("createdAt")},
+        });
+    }
+    if (portableStories.isEmpty()) {
+        setError(tr("There are no stories to export."));
+        return;
+    }
+    setError({});
     setBusy(true);
     const QVariantMap reply = runCommand({
         {"command", "export_markdown"},
         {"document", QVariantMap{
-            {"projectId", m_currentProjectId},
-            {"targetPath", path},
+            {"projectName", m_currentProject.value("name")},
+            {"projectPrefix", prefix},
+            {"stories", portableStories},
         }},
     });
     setBusy(false);
@@ -549,6 +797,12 @@ void WorkspaceController::exportMarkdown(const QUrl &targetFile)
         setError(reply.value("error").toMap().value("message").toString());
         return;
     }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        setError(tr("The export file could not be written: %1").arg(file.errorString()));
+        return;
+    }
+    file.write(reply.value("result").toMap().value("markdown").toString().toUtf8());
     emit info(tr("Exported to %1").arg(path));
 }
 
@@ -558,21 +812,31 @@ void WorkspaceController::importMarkdown(const QUrl &sourceFile)
         return;
     }
     const QString path = sourceFile.isLocalFile() ? sourceFile.toLocalFile() : sourceFile.toString();
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        setError(tr("The import file could not be read: %1").arg(file.errorString()));
+        return;
+    }
+    setError({});
     setBusy(true);
     const QVariantMap reply = runCommand({
         {"command", "import_markdown"},
-        {"markdown", QVariantMap{
-            {"projectId", m_currentProjectId},
-            {"sourcePath", path},
-        }},
+        {"markdown", QString::fromUtf8(file.readAll())},
     });
     setBusy(false);
     if (!reply.value("ok").toBool()) {
         setError(reply.value("error").toMap().value("message").toString());
         return;
     }
+    const QVariantList stories = reply.value("result").toMap().value("stories").toList();
+    if (!applyCurrentOperation({
+            {"operation", "import_stories"},
+            {"stories", stories},
+            {"imported_profile_name", tr("Imported Profile")},
+        })) {
+        return;
+    }
     emit info(tr("Imported from %1").arg(path));
-    refreshCurrent();
 }
 
 void WorkspaceController::setBusy(bool busy)
@@ -610,15 +874,52 @@ QVariantMap WorkspaceController::runCommand(const QVariantMap &command)
 
 void WorkspaceController::applyProject(const QVariantMap &project)
 {
+    const bool isCurrent = project.value("id").toString() == m_currentProjectId;
+    if (isCurrent) {
+        m_currentProject = project;
+    }
     for (int i = 0; i < m_projects.size(); ++i) {
         if (m_projects[i].toMap().value("id").toString() == project.value("id").toString()) {
             m_projects[i] = project;
             emit projectsChanged();
+            if (isCurrent) {
+                emit currentProjectChanged();
+            }
             return;
         }
     }
     m_projects.append(project);
     emit projectsChanged();
+    if (isCurrent) {
+        emit currentProjectChanged();
+    }
+}
+
+bool WorkspaceController::applyCurrentOperation(QVariantMap operation)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        setError(tr("Open a project first."));
+        return false;
+    }
+    setError({});
+    operation.insert("command", "apply_stored_workspace_command");
+    operation.insert("database_path", m_databasePath);
+    operation.insert("project_id", m_currentProjectId);
+    setBusy(true);
+    const QVariantMap reply = runCommand(operation);
+    setBusy(false);
+    if (!reply.value("ok").toBool()) {
+        setError(reply.value("error").toMap().value("message").toString());
+        return false;
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (project.isEmpty()) {
+        setError(tr("The core did not return the updated project."));
+        return false;
+    }
+    applyProject(project);
+    refreshCurrent();
+    return true;
 }
 
 } // namespace fsuserstories

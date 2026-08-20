@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QLoggingCategory>
 #include <QTextStream>
+#include <QTemporaryDir>
 
 #include "AppInfo.h"
 #include "CoreClient.h"
@@ -241,11 +242,56 @@ int main(int argc, char *argv[])
                                   << controller.lastError();
             return 4;
         }
+        QVariantMap project = controller.currentProject();
+        const QVariantMap actor = project.value("actors").toList().constFirst().toMap();
+        QVariantMap story = project.value("stories").toList().constFirst().toMap();
+        const QString storyId = story.value("id").toString();
+        controller.updateActor(actor.value("id").toString(),
+                               QStringLiteral("QA tester"),
+                               QStringLiteral("Validates packaged builds"));
+        controller.updateStory(storyId,
+                               QStringLiteral("Packaged application is usable"),
+                               actor.value("id").toString(),
+                               QStringLiteral("exercise every packaged workflow"),
+                               QStringLiteral("distribution failures are caught"),
+                               story.value("acceptanceCriteria").toList());
+        controller.updateStoryNotes(storyId, QStringLiteral("Smoke-tested notes"));
+        controller.addAcceptanceCriterion(storyId,
+                                           QStringLiteral("Edits persist through Rust"));
+        controller.setStoryStatus(storyId, QStringLiteral("active"));
+        controller.duplicateStory(storyId, QStringLiteral("Smoke test copy"));
+
+        QTemporaryDir transferDirectory;
+        const QString attachmentPath =
+            transferDirectory.filePath(QStringLiteral("smoke.txt"));
+        QFile attachmentFile(attachmentPath);
+        if (!attachmentFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            qCritical() << "Could not create smoke-test attachment";
+            return 5;
+        }
+        attachmentFile.write("packaged attachment");
+        attachmentFile.close();
+        controller.importAttachments(storyId, {QUrl::fromLocalFile(attachmentPath)});
+        project = controller.currentProject();
+        story = project.value("stories").toList().constFirst().toMap();
+        const QVariantList attachments = story.value("attachments").toList();
+        if (!attachments.isEmpty()) {
+            controller.removeAttachment(
+                storyId, attachments.constFirst().toMap().value("id").toString());
+        }
+        const QString markdownPath =
+            transferDirectory.filePath(QStringLiteral("stories.md"));
+        controller.exportMarkdown(QUrl::fromLocalFile(markdownPath));
+        if (!controller.lastError().isEmpty() || !QFileInfo::exists(markdownPath)) {
+            qCritical().noquote() << "Extended workspace smoke test failed:"
+                                  << controller.lastError();
+            return 6;
+        }
         controller.deleteProject(projectId);
         if (!controller.lastError().isEmpty()) {
             qCritical().noquote() << "Delete-project smoke test failed:"
                                   << controller.lastError();
-            return 5;
+            return 7;
         }
         qInfo() << "Windows bundle smoke test passed";
         return 0;
