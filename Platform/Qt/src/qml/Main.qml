@@ -418,7 +418,10 @@ ApplicationWindow {
     Dialog {
         id: gitDialog
         title: qsTr("Git Sharing")
-        modal: true; anchors.centerIn: parent; width: 620; height: 520
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(760, window.width - 80)
+        height: Math.min(720, window.height - 80)
         contentItem: GitSyncView { anchors.fill: parent }
         footer: DialogButtonBox {
             Button { text: qsTr("Close"); onClicked: gitDialog.close() }
