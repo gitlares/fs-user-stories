@@ -103,20 +103,37 @@ impl RepositoryEngine {
         let remote_branch_exists = fetch(&repository, access_token)?;
         let received_shared_changes =
             remote_branch_exists && fast_forward_if_possible(&repository)?;
-        let synchronized = if received_shared_changes {
+        // This is the Git snapshot our new commit will be based on.  Keep it
+        // separately from `base`: it is needed to recover when two clients
+        // fetch the same remote tip and try to publish at the same time.
+        let publication_base = if received_shared_changes {
             let shared = ProjectSnapshot::read(&self.root)?;
             let result = merge_snapshots(&base, snapshot, &shared)?;
             if !result.conflicts.is_empty() {
                 fs::write(pending_sync_path(&repository), serde_json::to_vec(&result)?)?;
                 return Err(CoreError::SyncConflicts(serde_json::to_string(&result)?));
             }
-            result.merged
+            (shared, result.merged)
         } else {
-            snapshot.clone()
+            (base, snapshot.clone())
         };
+        let (publication_base, synchronized) = publication_base;
         let digest = synchronized.write_with_attachments(&self.root, attachment_sources)?;
         commit_archive(&repository, "Update user stories")?;
-        push(&repository, access_token)?;
+        if let Err(error) = push(&repository, access_token) {
+            if matches!(&error, CoreError::Git(git_error)
+                if git_error.code() == git2::ErrorCode::NotFastForward)
+            {
+                return recover_rejected_push(
+                    &repository,
+                    &publication_base,
+                    &synchronized,
+                    attachment_sources,
+                    access_token,
+                );
+            }
+            return Err(error);
+        }
         Ok(SyncOutcome {
             digest,
             snapshot: synchronized,
@@ -143,6 +160,43 @@ impl RepositoryEngine {
         fs::remove_file(pending_path)?;
         Ok(SyncOutcome { digest, snapshot })
     }
+}
+
+/// Reconcile a concurrent publisher without discarding either workspace.
+///
+/// Both clients can legitimately fetch the same commit, create independent
+/// archives, then have one push rejected.  We re-fetch the winner, reset only
+/// the managed archive checkout, merge the two snapshots, and publish the
+/// merged result.  The caller still holds the local snapshot in memory, so a
+/// forced checkout cannot lose the user's changes.
+fn recover_rejected_push(
+    repository: &Repository,
+    base: &ProjectSnapshot,
+    local: &ProjectSnapshot,
+    attachment_sources: &AttachmentSources,
+    access_token: Option<&str>,
+) -> Result<SyncOutcome, CoreError> {
+    if !fetch(repository, access_token)? {
+        return Err(CoreError::SyncConflict);
+    }
+    let shared = checkout_fetched_remote(repository)?;
+    let result = merge_snapshots(base, local, &shared)?;
+    if !result.conflicts.is_empty() {
+        fs::write(pending_sync_path(repository), serde_json::to_vec(&result)?)?;
+        return Err(CoreError::SyncConflicts(serde_json::to_string(&result)?));
+    }
+    let digest = result.merged.write_with_attachments(
+        repository
+            .workdir()
+            .ok_or(CoreError::InvalidRepositoryState)?,
+        attachment_sources,
+    )?;
+    commit_archive(repository, "Merge concurrent shared updates")?;
+    push(repository, access_token)?;
+    Ok(SyncOutcome {
+        digest,
+        snapshot: result.merged,
+    })
 }
 
 fn pending_sync_path(repository: &Repository) -> PathBuf {
@@ -258,6 +312,39 @@ fn fast_forward_if_possible(repository: &Repository) -> Result<bool, CoreError> 
         return Ok(true);
     }
     Err(CoreError::SyncConflict)
+}
+
+fn checkout_fetched_remote(repository: &Repository) -> Result<ProjectSnapshot, CoreError> {
+    let reference_name = repository
+        .head()
+        .ok()
+        .and_then(|head| head.name().ok().map(str::to_owned))
+        .unwrap_or_else(|| format!("refs/heads/{SYNC_BRANCH}"));
+    let remote_reference =
+        repository.find_reference(&format!("refs/remotes/{DEFAULT_REMOTE}/{SYNC_BRANCH}"))?;
+    let target = remote_reference
+        .target()
+        .ok_or(CoreError::InvalidRepositoryState)?;
+    match repository.find_reference(&reference_name) {
+        Ok(mut reference) => {
+            reference.set_target(target, "Recover concurrent FS User Stories synchronization")?;
+        }
+        Err(_) => {
+            repository.reference(
+                &reference_name,
+                target,
+                true,
+                "Recover concurrent FS User Stories synchronization",
+            )?;
+        }
+    }
+    repository.set_head(&reference_name)?;
+    repository.checkout_head(Some(CheckoutBuilder::new().force()))?;
+    ProjectSnapshot::read(
+        repository
+            .workdir()
+            .ok_or(CoreError::InvalidRepositoryState)?,
+    )
 }
 
 fn push(repository: &Repository, access_token: Option<&str>) -> Result<(), CoreError> {
