@@ -5,6 +5,7 @@
 #include "StoryModel.h"
 
 #include <QFileInfo>
+#include <QDesktopServices>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -13,6 +14,10 @@
 Q_LOGGING_CATEGORY(lcWorkspace, "fsuserstories.workspace")
 
 namespace fsuserstories {
+
+namespace {
+constexpr auto kGitHubOAuthClientId = "Ov23liEDQnlgdtJTGCUt";
+}
 
 WorkspaceController::WorkspaceController(QObject *parent)
     : QObject(parent)
@@ -40,6 +45,16 @@ QObject *WorkspaceController::currentStoryModel() const
 QString WorkspaceController::coreBinaryPath() const
 {
     return m_corePath;
+}
+
+QString WorkspaceController::githubAuthorizationCode() const
+{
+    return m_pendingAuthorization.value("userCode").toString();
+}
+
+QString WorkspaceController::githubAuthorizationUrl() const
+{
+    return m_pendingAuthorization.value("verificationUrl").toString();
 }
 
 void WorkspaceController::load()
@@ -268,7 +283,7 @@ void WorkspaceController::synchronize()
         {"database_path", m_databasePath},
         {"attachments_root", m_attachmentsRoot},
         {"project_id", m_currentProjectId},
-        {"access_token", QVariant()},
+        {"access_token", m_accessToken.isEmpty() ? QVariant() : QVariant(m_accessToken)},
     });
     setBusy(false);
     if (!reply.value("ok").toBool()) {
@@ -286,12 +301,157 @@ void WorkspaceController::synchronize()
     refreshCurrent();
 }
 
-void WorkspaceController::acceptInvitation(const QString &invitationToken)
+bool WorkspaceController::acceptInvitation(const QString &invitationToken)
 {
-    Q_UNUSED(invitationToken);
-    setError(tr("Joining shared projects is not yet wired in this build. "
-                "Add a guest copy of the workspace.sqlite + Repositories folder "
-                "for now — see project docs."));
+    if (!m_client) {
+        setError(tr("The application core is not available."));
+        return false;
+    }
+
+    const QString invitation = invitationToken.trimmed();
+    if (invitation.isEmpty()) {
+        setError(tr("Enter an invitation code."));
+        return false;
+    }
+
+    setError({});
+    setBusy(true);
+
+    const QVariantMap invitationReply = runCommand({
+        {"command", "read_invitation"},
+        {"invitation", invitation},
+    });
+    if (!invitationReply.value("ok").toBool()) {
+        setBusy(false);
+        setError(invitationReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+
+    const QVariantMap invitationData = invitationReply.value("result").toMap();
+    const QString remoteUrl = invitationData.value("remoteUrl").toString().trimmed();
+    if (remoteUrl.isEmpty()) {
+        setBusy(false);
+        setError(tr("The invitation code does not contain a repository address."));
+        return false;
+    }
+
+    const QVariantMap githubReply = runCommand({
+        {"command", "remote_uses_github"},
+        {"remote_url", remoteUrl},
+    });
+    if (!githubReply.value("ok").toBool()) {
+        setBusy(false);
+        setError(githubReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+
+    const bool usesGitHub =
+        githubReply.value("result").toMap().value("usesGitHub").toBool();
+    if (!usesGitHub || !m_accessToken.isEmpty()) {
+        setBusy(false);
+        return joinInvitationRemote(remoteUrl, m_accessToken);
+    }
+
+    const QVariantMap authorizationReply = runCommand({
+        {"command", "github_begin_authorization"},
+        {"client_id", QString::fromLatin1(kGitHubOAuthClientId)},
+    });
+    setBusy(false);
+    if (!authorizationReply.value("ok").toBool()) {
+        setError(authorizationReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+
+    m_pendingAuthorization = authorizationReply.value("result").toMap();
+    m_pendingRemoteUrl = remoteUrl;
+    if (githubAuthorizationCode().isEmpty() || githubAuthorizationUrl().isEmpty()) {
+        cancelInvitationAuthorization();
+        setError(tr("GitHub returned an incomplete authorization response."));
+        return false;
+    }
+    emit githubAuthorizationChanged();
+    QDesktopServices::openUrl(QUrl(githubAuthorizationUrl()));
+    emit info(tr("Authorize GitHub in the browser, then return and choose Continue."));
+    return false;
+}
+
+bool WorkspaceController::finishInvitationAuthorization()
+{
+    if (m_pendingAuthorization.isEmpty() || m_pendingRemoteUrl.isEmpty()) {
+        setError(tr("Start the invitation again to authorize GitHub."));
+        return false;
+    }
+
+    setError({});
+    setBusy(true);
+    const QVariantMap authorizationReply = runCommand({
+        {"command", "github_finish_authorization"},
+        {"client_id", QString::fromLatin1(kGitHubOAuthClientId)},
+        {"authorization", m_pendingAuthorization},
+    });
+    setBusy(false);
+    if (!authorizationReply.value("ok").toBool()) {
+        setError(authorizationReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+
+    const QString accessToken =
+        authorizationReply.value("result").toMap().value("accessToken").toString();
+    if (accessToken.isEmpty()) {
+        setError(tr("GitHub authorized the app but returned no access token."));
+        return false;
+    }
+
+    m_accessToken = accessToken;
+    const QString remoteUrl = m_pendingRemoteUrl;
+    cancelInvitationAuthorization();
+    return joinInvitationRemote(remoteUrl, m_accessToken);
+}
+
+void WorkspaceController::cancelInvitationAuthorization()
+{
+    if (m_pendingAuthorization.isEmpty() && m_pendingRemoteUrl.isEmpty()) {
+        return;
+    }
+    m_pendingAuthorization.clear();
+    m_pendingRemoteUrl.clear();
+    emit githubAuthorizationChanged();
+}
+
+bool WorkspaceController::joinInvitationRemote(const QString &remoteUrl,
+                                               const QString &accessToken)
+{
+    setBusy(true);
+    QVariantMap joinCommand{
+        {"command", "join_stored_project"},
+        {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
+        {"repositories_root", m_repositoriesRoot},
+        {"remote_url", remoteUrl},
+    };
+    if (!accessToken.isEmpty()) {
+        joinCommand.insert("access_token", accessToken);
+    }
+    const QVariantMap joinReply = runCommand(joinCommand);
+    setBusy(false);
+    if (!joinReply.value("ok").toBool()) {
+        setError(joinReply.value("error").toMap().value("message").toString());
+        return false;
+    }
+
+    const QVariantMap project = joinReply.value("result").toMap().value("project").toMap();
+    if (project.isEmpty()) {
+        setError(tr("The shared project was cloned but the core returned no project data."));
+        return false;
+    }
+
+    applyProject(project);
+    m_currentProjectId = project.value("id").toString();
+    m_currentProject = project;
+    emit currentProjectChanged();
+    refreshCurrent();
+    emit info(tr("Shared project joined."));
+    return true;
 }
 
 void WorkspaceController::exportMarkdown(const QUrl &targetFile)

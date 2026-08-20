@@ -24,6 +24,9 @@ class WorkspaceController : public QObject
     Q_PROPERTY(QString databasePath READ databasePath CONSTANT)
     Q_PROPERTY(QString attachmentsRoot READ attachmentsRoot CONSTANT)
     Q_PROPERTY(QString repositoriesRoot READ repositoriesRoot CONSTANT)
+    Q_PROPERTY(QString githubAuthorizationCode READ githubAuthorizationCode NOTIFY githubAuthorizationChanged)
+    Q_PROPERTY(QString githubAuthorizationUrl READ githubAuthorizationUrl NOTIFY githubAuthorizationChanged)
+    Q_PROPERTY(bool githubAuthorizationPending READ githubAuthorizationPending NOTIFY githubAuthorizationChanged)
 
 public:
     explicit WorkspaceController(QObject *parent = nullptr);
@@ -40,6 +43,9 @@ public:
     QString databasePath() const { return m_databasePath; }
     QString attachmentsRoot() const { return m_attachmentsRoot; }
     QString repositoriesRoot() const { return m_repositoriesRoot; }
+    QString githubAuthorizationCode() const;
+    QString githubAuthorizationUrl() const;
+    bool githubAuthorizationPending() const { return !m_pendingAuthorization.isEmpty(); }
 
     Q_INVOKABLE void load();
     Q_INVOKABLE void createProject(const QString &name, const QString &prefix);
@@ -62,10 +68,11 @@ public:
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
 
-    /// Joins a shared project via an invitation URL or token. The actual
-    /// implementation calls into the Rust core (read_invitation / clone_shared)
-    /// but here we expose a stub until that path is wired end to end.
-    Q_INVOKABLE void acceptInvitation(const QString &invitationToken);
+    /// Decodes an invitation code and imports its shared Git repository.
+    /// Returns true only after the project has been cloned and stored locally.
+    Q_INVOKABLE bool acceptInvitation(const QString &invitationToken);
+    Q_INVOKABLE bool finishInvitationAuthorization();
+    Q_INVOKABLE void cancelInvitationAuthorization();
 
 signals:
     void projectsChanged();
@@ -74,12 +81,15 @@ signals:
     void lastErrorChanged();
     void info(const QString &message);
     void syncConflicts(const QVariantList &conflicts);
+    void githubAuthorizationChanged();
 
 private:
     void setBusy(bool busy);
     void setError(const QString &message);
     QVariantMap runCommand(const QVariantMap &command);
     void applyProject(const QVariantMap &project);
+    bool joinInvitationRemote(const QString &remoteUrl,
+                              const QString &accessToken = QString());
 
     std::unique_ptr<CoreClient> m_client;
     QString m_corePath;
@@ -89,6 +99,9 @@ private:
     QVariantList m_projects;
     QString m_currentProjectId;
     QVariantMap m_currentProject;
+    QVariantMap m_pendingAuthorization;
+    QString m_pendingRemoteUrl;
+    QString m_accessToken;
     StoryModel *m_storyModel = nullptr;
     bool m_busy = false;
     QString m_lastError;

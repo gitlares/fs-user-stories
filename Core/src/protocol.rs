@@ -82,6 +82,7 @@ pub enum Command {
     ReadInvitation {
         invitation: String,
     },
+    #[serde(rename = "remote_uses_github", alias = "remote_uses_git_hub")]
     RemoteUsesGitHub {
         remote_url: String,
     },
@@ -694,6 +695,24 @@ impl CoreError {
             Self::GitHubAuthorizationExpired => "github_authorization_expired",
             Self::GitHubAuthorizationDenied => "github_authorization_denied",
             Self::GitHubApi(_) => "github_api_error",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Command;
+
+    #[test]
+    fn github_remote_command_accepts_canonical_and_legacy_names() {
+        for command_name in ["remote_uses_github", "remote_uses_git_hub"] {
+            let command: Command = serde_json::from_value(serde_json::json!({
+                "command": command_name,
+                "remote_url": "https://github.com/example/project.git"
+            }))
+            .expect("GitHub remote command should deserialize");
+
+            assert!(matches!(command, Command::RemoteUsesGitHub { .. }));
         }
     }
 }

@@ -243,18 +243,59 @@ ApplicationWindow {
         width: 460
         contentItem: ColumnLayout {
             spacing: 8
-            Label { text: qsTr("Paste the invitation URL:"); wrapMode: Text.WordWrap; Layout.fillWidth: true }
-            TextField { id: inviteToken; placeholderText: qsTr("https://…/invitation/…"); Layout.fillWidth: true }
+            Label { text: qsTr("Paste the invitation code:"); wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            TextField { id: inviteToken; placeholderText: qsTr("Invitation code"); Layout.fillWidth: true }
+            Label {
+                visible: workspace.lastError !== ""
+                text: workspace.lastError
+                color: "#b00020"
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            ColumnLayout {
+                visible: workspace.githubAuthorizationPending
+                Layout.fillWidth: true
+                spacing: 6
+                Label { text: qsTr("Authorize GitHub with this code:") }
+                Label {
+                    text: workspace.githubAuthorizationCode
+                    font.family: "monospace"
+                    font.pixelSize: 20
+                    font.bold: true
+                    selectByMouse: true
+                }
+                Button {
+                    text: qsTr("Open GitHub")
+                    onClicked: Qt.openUrlExternally(workspace.githubAuthorizationUrl)
+                }
+                Label {
+                    text: qsTr("Complete authorization in the browser, then choose Continue.")
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+            }
         }
         footer: DialogButtonBox {
             Button {
-                text: qsTr("Join"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                text: workspace.githubAuthorizationPending ? qsTr("Continue") : qsTr("Join")
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 enabled: inviteToken.text.trim() !== ""
-                onClicked: { workspace.acceptInvitation(inviteToken.text.trim()); close() }
+                onClicked: {
+                    var joined = workspace.githubAuthorizationPending
+                        ? workspace.finishInvitationAuthorization()
+                        : workspace.acceptInvitation(inviteToken.text.trim())
+                    if (joined) {
+                        inviteToken.clear()
+                        close()
+                    }
+                }
             }
             Button {
                 text: qsTr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: close()
+                onClicked: {
+                    workspace.cancelInvitationAuthorization()
+                    close()
+                }
             }
         }
     }
