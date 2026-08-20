@@ -14,6 +14,20 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 option(FS_USER_STORIES_BUILD_TESTS "Build C++ unit tests" OFF)
 
+include(FetchContent)
+set(BUILD_WITH_QT6 ON CACHE BOOL "Build QtKeychain with Qt 6" FORCE)
+set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable QtKeychain test app" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "Disable dependency tests" FORCE)
+set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable QtKeychain translations" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Link QtKeychain statically" FORCE)
+set(LIBSECRET_SUPPORT OFF CACHE BOOL "Use Secret Service through Qt D-Bus" FORCE)
+FetchContent_Declare(qtkeychain
+    GIT_REPOSITORY https://github.com/frankosterfeld/qtkeychain.git
+    GIT_TAG ad7344c45a86a4f66cbafc4b081b5f7b876cb0b7
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(qtkeychain)
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS
     Core
     Gui
@@ -31,6 +45,8 @@ set(FS_USER_STORIES_SOURCES
     src/CoreClient.cpp
     src/CorePaths.h
     src/CorePaths.cpp
+    src/CredentialStore.h
+    src/CredentialStore.cpp
     src/WorkspaceController.h
     src/WorkspaceController.cpp
     src/StoryModel.h
@@ -70,7 +86,10 @@ target_link_libraries(FSUserStories PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
+    qt6keychain
 )
+
+target_compile_definitions(FSUserStories PRIVATE QTKEYCHAIN_NO_EXPORT)
 
 # Bundle Material Symbols Outlined icon font alongside the binary. main.cpp
 # loads it at startup so QML can use icon ligatures (e.g. "person_badge_plus")

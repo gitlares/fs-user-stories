@@ -13,3 +13,8 @@ uses the following redistributable open-source components:
 The complete transitive Rust dependency versions are pinned in
 `Core/Cargo.lock`. Release packaging must retain the corresponding license
 texts and this notice.
+# QtKeychain
+
+FS User Stories uses QtKeychain 0.15.0 to store GitHub access tokens in the
+operating system's secure credential service. QtKeychain is distributed under
+the Modified BSD License. Source: https://github.com/frankosterfeld/qtkeychain

@@ -2,6 +2,7 @@
 #include "WorkspaceController.h"
 #include "CoreClient.h"
 #include "CorePaths.h"
+#include "CredentialStore.h"
 #include "StoryModel.h"
 
 #include <QFileInfo>
@@ -341,6 +342,9 @@ void WorkspaceController::synchronize()
     if (!m_client || m_currentProjectId.isEmpty()) {
         return;
     }
+    if (m_accessToken.isEmpty()) {
+        m_accessToken = CredentialStore::readGitHubToken();
+    }
     setBusy(true);
     const QVariantMap reply = runCommand({
         {"command", "synchronize_stored_project"},
@@ -411,6 +415,9 @@ bool WorkspaceController::acceptInvitation(const QString &invitationToken)
 
     const bool usesGitHub =
         githubReply.value("result").toMap().value("usesGitHub").toBool();
+    if (usesGitHub && m_accessToken.isEmpty()) {
+        m_accessToken = CredentialStore::readGitHubToken();
+    }
     if (!usesGitHub || !m_accessToken.isEmpty()) {
         setBusy(false);
         return joinInvitationRemote(remoteUrl, m_accessToken);
@@ -467,6 +474,11 @@ bool WorkspaceController::finishInvitationAuthorization()
     }
 
     m_accessToken = accessToken;
+    QString credentialError;
+    if (!CredentialStore::writeGitHubToken(m_accessToken, &credentialError)) {
+        emit info(tr("GitHub was authorized, but the token could not be saved securely: %1")
+                  .arg(credentialError));
+    }
     const QString remoteUrl = m_pendingRemoteUrl;
     cancelInvitationAuthorization();
     return joinInvitationRemote(remoteUrl, m_accessToken);
