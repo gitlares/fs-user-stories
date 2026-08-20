@@ -12,6 +12,7 @@
 #include <QFile>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QTextStream>
 
 #include "AppInfo.h"
 #include "CoreClient.h"
@@ -19,6 +20,27 @@
 #include "WorkspaceController.h"
 
 using namespace fsuserstories;
+
+namespace {
+QFile *gDiagnosticFile = nullptr;
+
+void diagnosticMessageHandler(QtMsgType type,
+                              const QMessageLogContext &,
+                              const QString &message)
+{
+    if (!gDiagnosticFile) {
+        return;
+    }
+    const char *level = "INFO";
+    if (type == QtWarningMsg) level = "WARNING";
+    else if (type == QtCriticalMsg) level = "CRITICAL";
+    else if (type == QtFatalMsg) level = "FATAL";
+    else if (type == QtDebugMsg) level = "DEBUG";
+    QTextStream stream(gDiagnosticFile);
+    stream << level << ": " << message << '\n';
+    stream.flush();
+}
+}
 
 // String identifiers used by QML for icon ligatures that map to
 // Material Symbols glyphs (the open-source cousin of Apple SF Symbols).
@@ -59,6 +81,20 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("fs-user-stories")));
+
+    QFile diagnosticFile;
+    if (app.arguments().contains(QStringLiteral("--smoke-test"))) {
+        const QString diagnosticPath =
+            qEnvironmentVariable("FS_USER_STORIES_DIAGNOSTICS");
+        if (!diagnosticPath.isEmpty()) {
+            diagnosticFile.setFileName(diagnosticPath);
+            if (diagnosticFile.open(QIODevice::WriteOnly | QIODevice::Truncate |
+                                    QIODevice::Text)) {
+                gDiagnosticFile = &diagnosticFile;
+                qInstallMessageHandler(diagnosticMessageHandler);
+            }
+        }
+    }
 
     // macOS-flavoured palette. Even on Windows/Linux the app reads closer to
     // the macOS reference screenshot. macOS-style colours:
@@ -169,6 +205,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("appIcons", QString());
     engine.loadFromModule("FSUserStories", "Main");
     if (engine.rootObjects().isEmpty()) {
+        qCritical() << "QML did not create the application window";
         return 1;
     }
 
@@ -180,6 +217,34 @@ int main(int argc, char *argv[])
         if (!controller.lastError().isEmpty()) {
             qCritical().noquote() << "Smoke test failed:" << controller.lastError();
             return 2;
+        }
+
+        // Exercise the same controller methods used by the QML buttons. This
+        // catches packaged-core failures that a window-only smoke test misses.
+        controller.createProject(QStringLiteral("Windows package smoke test"),
+                                 QStringLiteral("SMK"));
+        if (!controller.lastError().isEmpty() || controller.projects().isEmpty()) {
+            qCritical().noquote() << "Create-project smoke test failed:"
+                                  << controller.lastError();
+            return 3;
+        }
+        const QString projectId =
+            controller.projects().constLast().toMap().value("id").toString();
+        controller.openProject(projectId);
+        controller.createStory(QStringLiteral("Packaged application opens"),
+                               QStringLiteral("tester"),
+                               QStringLiteral("exercise the Windows build"),
+                               QStringLiteral("distribution failures are caught"));
+        if (!controller.lastError().isEmpty()) {
+            qCritical().noquote() << "Create-story smoke test failed:"
+                                  << controller.lastError();
+            return 4;
+        }
+        controller.deleteProject(projectId);
+        if (!controller.lastError().isEmpty()) {
+            qCritical().noquote() << "Delete-project smoke test failed:"
+                                  << controller.lastError();
+            return 5;
         }
         qInfo() << "Windows bundle smoke test passed";
         return 0;

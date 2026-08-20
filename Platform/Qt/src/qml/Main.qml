@@ -224,13 +224,13 @@ ApplicationWindow {
                 enabled: npName.text.trim() !== "" && npPrefix.text.trim() !== ""
                 onClicked: {
                     workspace.createProject(npName.text.trim(), npPrefix.text.trim().toUpperCase())
-                    close()
+                    if (workspace.lastError === "") newProjectDialog.close()
                 }
             }
             Button {
                 text: qsTr("Cancel")
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: close()
+                onClicked: newProjectDialog.close()
             }
         }
     }
@@ -257,12 +257,14 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 6
                 Label { text: qsTr("Authorize GitHub with this code:") }
-                Label {
+                TextEdit {
                     text: workspace.githubAuthorizationCode
                     font.family: "monospace"
                     font.pixelSize: 20
                     font.bold: true
+                    readOnly: true
                     selectByMouse: true
+                    color: palette.text
                 }
                 Button {
                     text: qsTr("Open GitHub")
@@ -286,7 +288,7 @@ ApplicationWindow {
                         : workspace.acceptInvitation(inviteToken.text.trim())
                     if (joined) {
                         inviteToken.clear()
-                        close()
+                        joinSharedDialog.close()
                     }
                 }
             }
@@ -294,7 +296,7 @@ ApplicationWindow {
                 text: qsTr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
                 onClicked: {
                     workspace.cancelInvitationAuthorization()
-                    close()
+                    joinSharedDialog.close()
                 }
             }
         }
@@ -317,11 +319,11 @@ ApplicationWindow {
             Button {
                 text: qsTr("Save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 enabled: naName.text.trim() !== ""
-                onClicked: { close() }   // wired in next iteration
+                onClicked: { newActorDialog.close() }   // wired in next iteration
             }
             Button {
                 text: qsTr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: close()
+                onClicked: newActorDialog.close()
             }
         }
     }
@@ -352,12 +354,12 @@ ApplicationWindow {
                                           nsAsA.text.trim(),
                                           nsIWant.text.trim(),
                                           nsSoThat.text.trim())
-                    close()
+                    if (workspace.lastError === "") newStoryDialog.close()
                 }
             }
             Button {
                 text: qsTr("Cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-                onClicked: close()
+                onClicked: newStoryDialog.close()
             }
         }
     }
