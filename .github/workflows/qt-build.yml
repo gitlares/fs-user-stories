@@ -93,7 +93,18 @@ jobs:
           if (-not (Test-Path $exe)) {
             throw "Installed executable was not found: $exe"
           }
-          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $exe
+          $startInfo.ArgumentList.Add("--smoke-test")
+          $startInfo.UseShellExecute = $false
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $stdout = $process.StandardOutput.ReadToEnd()
+          $stderr = $process.StandardError.ReadToEnd()
+          $process.WaitForExit()
+          if ($stdout) { Write-Host $stdout }
+          if ($stderr) { Write-Host $stderr }
           if ($process.ExitCode -ne 0) {
             throw "Installed Windows application failed with exit code $($process.ExitCode)"
           }
