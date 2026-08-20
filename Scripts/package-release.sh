@@ -8,7 +8,7 @@ project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 distribution_dir="$project_dir/Distribution"
 app_name="FS User Stories"
 app_bundle="$distribution_dir/$app_name.app"
-dmg_path="$distribution_dir/FS-User-Stories-1.0.3.dmg"
+dmg_path="$distribution_dir/FS-User-Stories-1.0.4.dmg"
 core_source="$project_dir/Sources/FSUserStoriesApp/Resources/Core/fs-user-stories-core"
 
 cd "$project_dir"
@@ -53,7 +53,7 @@ cp -R "$app_bundle" "$staging_dir/"
 ln -s /Applications "$staging_dir/Applications"
 
 hdiutil create \
-    -volname "$app_name 1.0.3" \
+    -volname "$app_name 1.0.4" \
     -srcfolder "$staging_dir" \
     -format UDZO \
     -ov \

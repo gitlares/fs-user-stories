@@ -1,6 +1,6 @@
 name: fs-user-stories
 title: FS User Stories
-version: '1.0.3'
+version: '1.0.4'
 summary: Plan, share and sync user stories with Git
 description: |
   FS User Stories is a focused desktop workspace for product teams. Create
@@ -12,7 +12,7 @@ description: |
   are synchronized through the configured Git remote and conflicts are reported
   instead of silently overwriting work.
 
-  This snap is the x86_64 Linux build of FS User Stories 1.0.3.
+  This snap is the x86_64 Linux build of FS User Stories 1.0.4.
 website: https://github.com/gitlares/fs-user-stories
 issues: https://github.com/gitlares/fs-user-stories/issues
 source-code: https://github.com/gitlares/fs-user-stories

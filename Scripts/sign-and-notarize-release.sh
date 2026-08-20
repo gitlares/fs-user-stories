@@ -12,7 +12,7 @@ project_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 distribution_dir="$project_dir/Distribution"
 app_bundle="$distribution_dir/FS User Stories.app"
 core_executable="$app_bundle/Contents/Resources/FSUserStories_FSUserStoriesApp.bundle/fs-user-stories-core"
-dmg_path="$distribution_dir/FS-User-Stories-1.0.3.dmg"
+dmg_path="$distribution_dir/FS-User-Stories-1.0.4.dmg"
 
 if [ ! -d "$app_bundle" ] || [ ! -x "$core_executable" ]; then
     echo "Run Scripts/package-release.sh before signing." >&2
@@ -38,7 +38,7 @@ cp -R "$app_bundle" "$staging_dir/"
 ln -s /Applications "$staging_dir/Applications"
 
 hdiutil create \
-    -volname "FS User Stories 1.0.3" \
+    -volname "FS User Stories 1.0.4" \
     -srcfolder "$staging_dir" \
     -format UDZO \
     -ov \

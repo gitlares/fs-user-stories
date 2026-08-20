@@ -21,7 +21,7 @@ BUILD_DIRECTORY="$QT_PROJECT/build"
 APP_DIR="$BUILD_DIRECTORY/AppDir"
 OUTPUT_DIR="$PROJECT_DIRECTORY/Distribution/Linux"
 APP_NAME="FSUserStories"
-APP_VERSION="1.0.3"
+APP_VERSION="1.0.4"
 
 if ! command -v cmake >/dev/null 2>&1; then
     echo "cmake is required" >&2

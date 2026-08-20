@@ -57,16 +57,6 @@ struct RepositoryResponse {
     html_url: String,
 }
 
-#[derive(Deserialize)]
-struct UserSearchResponse {
-    items: Vec<UserSearchItem>,
-}
-
-#[derive(Deserialize)]
-struct UserSearchItem {
-    login: String,
-}
-
 pub fn begin_authorization(client_id: &str) -> Result<DeviceAuthorization, CoreError> {
     configured_client_id(client_id)?;
     let response: DeviceCodeResponse = post_form(
@@ -170,7 +160,12 @@ pub fn invite_collaborator(
 ) -> Result<(), CoreError> {
     let repository = github_repository_path(repository_url)
         .ok_or_else(|| CoreError::GitHubApi("This is not a GitHub repository".into()))?;
-    let username = resolve_collaborator_username(username, access_token)?;
+    let username = username.trim();
+    if !is_github_username(username) {
+        return Err(CoreError::GitHubApi(
+            "Enter the collaborator's GitHub username (not an email address).".into(),
+        ));
+    }
     let response = api_request(
         "PUT",
         &format!("{API_ROOT}/repos/{repository}/collaborators/{username}"),
@@ -178,40 +173,6 @@ pub fn invite_collaborator(
         json!({"permission": "push"}),
     )?;
     ensure_status(&response, &[201, 204])
-}
-
-fn resolve_collaborator_username(value: &str, access_token: &str) -> Result<String, CoreError> {
-    let value = value.trim();
-    if is_github_username(value) {
-        return Ok(value.into());
-    }
-    if !value.contains('@') {
-        return Err(CoreError::GitHubApi(
-            "Enter a valid GitHub username or email address.".into(),
-        ));
-    }
-
-    // GitHub accepts only a username for a repository invitation. Search first
-    // so people can use an email address when GitHub has made it discoverable.
-    let query = percent_encode_query_component(&format!("{value} in:email"));
-    let response = api_request(
-        "GET",
-        &format!("{API_ROOT}/search/users?q={query}"),
-        access_token,
-        Value::Null,
-    )?;
-    ensure_status(&response, &[200])?;
-    let matches: UserSearchResponse =
-        serde_json::from_slice(&response.body).map_err(|_| CoreError::GitHubInvalidResponse)?;
-    match matches.items.as_slice() {
-        [user] => Ok(user.login.clone()),
-        [] => Err(CoreError::GitHubApi(
-            "GitHub could not resolve that email address. Ask the collaborator for their GitHub username.".into(),
-        )),
-        _ => Err(CoreError::GitHubApi(
-            "That email address matches more than one GitHub account. Enter the collaborator's GitHub username.".into(),
-        )),
-    }
 }
 
 fn is_github_username(value: &str) -> bool {
@@ -251,13 +212,6 @@ fn api_request(
     let authorization = format!("Bearer {access_token}");
     let agent = github_agent();
     let result = match method {
-        "GET" => agent
-            .get(url)
-            .header("Accept", "application/vnd.github+json")
-            .header("Authorization", &authorization)
-            .header("X-GitHub-Api-Version", API_VERSION)
-            .header("User-Agent", "FS-User-Stories")
-            .call(),
         "POST" => agent
             .post(url)
             .header("Accept", "application/vnd.github+json")
@@ -422,13 +376,5 @@ mod tests {
         assert!(!is_github_username("person@example.com"));
         assert!(!is_github_username("-octocat"));
         assert!(!is_github_username("octocat-"));
-    }
-
-    #[test]
-    fn encodes_email_search_query() {
-        assert_eq!(
-            percent_encode_query_component("name+tag@example.com in:email"),
-            "name%2Btag%40example.com%20in%3Aemail"
-        );
     }
 }

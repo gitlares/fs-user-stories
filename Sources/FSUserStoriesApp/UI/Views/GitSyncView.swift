@@ -320,11 +320,11 @@ struct GitSyncView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(L10n.string("Invite a GitHub collaborator"))
                             .font(.headline)
-                        Text(L10n.string("Enter their GitHub username or email address. They must accept GitHub's invitation before joining this private project."))
+                        Text(L10n.string("Enter their GitHub username. They must accept GitHub's invitation before joining this private project."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
-                            TextField(L10n.string("GitHub username or email"), text: $collaboratorUsername)
+                            TextField(L10n.string("GitHub username"), text: $collaboratorUsername)
                                 .textFieldStyle(.roundedBorder)
                                 .onSubmit { inviteCollaborator(project) }
                             Button(L10n.string("Invite")) {

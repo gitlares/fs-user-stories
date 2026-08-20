@@ -1,4 +1,4 @@
-# Releasing FS User Stories 1.0.3 for macOS
+# Releasing FS User Stories 1.0.4 for macOS
 
 FS User Stories deliberately separates reproducible packaging from release-owner
 operations. The packaging script never accesses a signing identity, Apple ID,
@@ -15,7 +15,7 @@ From the repository root:
 This creates:
 
 - `Distribution/FS User Stories.app`
-- `Distribution/FS-User-Stories-1.0.3.dmg`
+- `Distribution/FS-User-Stories-1.0.4.dmg`
 
 Both artifacts currently target Apple Silicon.
 
@@ -61,18 +61,18 @@ After signing the application, recreate the disk image so it contains the signed
 bundle:
 
 ```sh
-rm "Distribution/FS-User-Stories-1.0.3.dmg"
+rm "Distribution/FS-User-Stories-1.0.4.dmg"
 staging_dir=$(mktemp -d "${TMPDIR:-/tmp}/fs-user-stories-release.XXXXXX")
 cp -R "Distribution/FS User Stories.app" "$staging_dir/"
 ln -s /Applications "$staging_dir/Applications"
-hdiutil create -volname "FS User Stories 1.0.3" \
+hdiutil create -volname "FS User Stories 1.0.4" \
   -srcfolder "$staging_dir" -format UDZO -ov \
-  "Distribution/FS-User-Stories-1.0.3.dmg"
+  "Distribution/FS-User-Stories-1.0.4.dmg"
 rm -rf "$staging_dir"
 
 codesign --force --timestamp \
   --sign "$FS_SIGNING_IDENTITY" \
-  "Distribution/FS-User-Stories-1.0.3.dmg"
+  "Distribution/FS-User-Stories-1.0.4.dmg"
 ```
 
 ## 4. Notarize and staple manually
@@ -80,13 +80,13 @@ codesign --force --timestamp \
 Create a Keychain profile once using `xcrun notarytool store-credentials`, then:
 
 ```sh
-xcrun notarytool submit "Distribution/FS-User-Stories-1.0.3.dmg" \
+xcrun notarytool submit "Distribution/FS-User-Stories-1.0.4.dmg" \
   --keychain-profile "FSUserStories-Notary" --wait
 
-xcrun stapler staple "Distribution/FS-User-Stories-1.0.3.dmg"
-xcrun stapler validate "Distribution/FS-User-Stories-1.0.3.dmg"
+xcrun stapler staple "Distribution/FS-User-Stories-1.0.4.dmg"
+xcrun stapler validate "Distribution/FS-User-Stories-1.0.4.dmg"
 spctl --assess --type open --context context:primary-signature \
-  --verbose=2 "Distribution/FS-User-Stories-1.0.3.dmg"
+  --verbose=2 "Distribution/FS-User-Stories-1.0.4.dmg"
 ```
 
 ## 5. Publish manually
