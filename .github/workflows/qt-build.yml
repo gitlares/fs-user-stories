@@ -84,7 +84,7 @@ jobs:
       - name: Install and smoke-test packaged application
         shell: pwsh
         run: |
-          $installer = Join-Path $env:GITHUB_WORKSPACE "Distribution/Windows/FSUserStoriesSetup-1.0.2-x64.exe"
+          $installer = Join-Path $env:GITHUB_WORKSPACE "Distribution/Windows/FSUserStoriesSetup-1.0.3-x64.exe"
           $install = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
           if ($install.ExitCode -ne 0) {
             throw "Windows installer failed with exit code $($install.ExitCode)"
@@ -119,6 +119,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fs-user-stories-windows-x64-installer
-          path: Distribution/Windows/FSUserStoriesSetup-1.0.2-x64.exe
+          path: Distribution/Windows/FSUserStoriesSetup-1.0.3-x64.exe
           if-no-files-found: error
           retention-days: 14

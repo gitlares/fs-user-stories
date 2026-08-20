@@ -1,6 +1,6 @@
 [package]
 name = "fs-user-stories-core"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 license = "MIT"
 description = "Local, cross-platform core for FS User Stories"

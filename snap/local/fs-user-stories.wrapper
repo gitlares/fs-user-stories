@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+export FS_USER_STORIES_CORE="$SNAP/usr/lib/fs-user-stories/core/fs-user-stories-core"
+export LD_LIBRARY_PATH="$SNAP/usr/lib:$SNAP/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+export QML2_IMPORT_PATH="$SNAP/usr/qml:$SNAP/usr/lib/qt6/qml:${QML2_IMPORT_PATH:-}"
+export QT_PLUGIN_PATH="$SNAP/usr/plugins:$SNAP/usr/lib/qt6/plugins:${QT_PLUGIN_PATH:-}"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$SNAP/usr/plugins/platforms:$SNAP/usr/lib/qt6/plugins/platforms"
+export QSG_RENDER_LOOP=threaded
+
+exec "$SNAP/usr/bin/fs-user-stories" "$@"

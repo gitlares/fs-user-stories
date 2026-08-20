@@ -216,12 +216,18 @@ Item {
                         text: qsTr("Invite a GitHub Collaborator")
                         font.weight: Font.DemiBold
                     }
+                    Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("Enter their GitHub username or email address. They must accept GitHub's invitation before joining this private project.")
+                        color: theme.secondaryText
+                    }
                     RowLayout {
                         Layout.fillWidth: true
                         MacTextField {
                             id: collaboratorField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("GitHub username")
+                            placeholderText: qsTr("GitHub username or email")
                         }
                         MacButton {
                             text: qsTr("Send Invitation")
