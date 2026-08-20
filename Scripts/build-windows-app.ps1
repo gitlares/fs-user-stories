@@ -50,32 +50,44 @@ New-Item -ItemType Directory -Force -Path $fontsDir | Out-Null
 Copy-Item -Path (Join-Path $qtSrcDir "resources/fonts/MaterialSymbolsOutlined-Variable.ttf") `
             -Destination $fontsDir
 
-# 2c. Bundle the Visual C++ runtime DLLs (vcruntime140, msvcp140, ucrtbase, …).
+# 2c. Bundle the Visual C++ runtime DLLs (vcruntime140, msvcp140, …).
 #     Without these, fs-user-stories.exe fails to launch on a Windows install
 #     that does not have VC++ Redist installed (a common "the exe doesn't open"
 #     report). The DLLs live next to the VS install that GitHub Actions uses.
 $vcRoot = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022" `
-              -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer }
+              -Directory -ErrorAction SilentlyContinue |
+              Sort-Object Name |
+              Select-Object -First 1
 if ($vcRoot) {
     $vcDir = Join-Path $vcRoot.FullName "VC/Redist/MSVC"
-    $vcVerDir = Get-ChildItem $vcDir -ErrorAction SilentlyContinue | Select-Object -First 1
+    $vcVerDir = Get-ChildItem $vcDir -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
     if ($vcVerDir) {
         $vcX64 = Join-Path $vcVerDir.FullName "x64"
         if (Test-Path $vcX64) {
-            Write-Host "==> Bundling VC++ runtime from $vcX64"
-            $vcDlls = @(
+            # Visual Studio stores the DLLs one level deeper, normally in
+            # x64/Microsoft.VC14x.CRT/.  The previous implementation looked
+            # directly in x64/, printed a success message, and silently copied
+            # nothing.  Locate the actual CRT directory and fail packaging if
+            # the three DLLs imported by our executables are not staged.
+            $runtimeProbe = Get-ChildItem $vcX64 -Recurse -File -Filter "vcruntime140.dll" |
+                Select-Object -First 1
+            if (-not $runtimeProbe) {
+                throw "Could not locate vcruntime140.dll below $vcX64"
+            }
+            $vcCrtDir = $runtimeProbe.Directory.FullName
+            Write-Host "==> Bundling VC++ runtime from $vcCrtDir"
+            Copy-Item -Path (Join-Path $vcCrtDir "*.dll") -Destination $stageDir
+
+            $requiredRuntimeDlls = @(
                 "vcruntime140.dll",
                 "vcruntime140_1.dll",
-                "msvcp140.dll",
-                "msvcp140_1.dll",
-                "msvcp140_2.dll",
-                "concrt140.dll",
-                "vccorlib140.dll"
+                "msvcp140.dll"
             )
-            foreach ($dll in $vcDlls) {
-                $src = Join-Path $vcX64 $dll
-                if (Test-Path $src) {
-                    Copy-Item -Path $src -Destination $stageDir
+            foreach ($dll in $requiredRuntimeDlls) {
+                if (-not (Test-Path (Join-Path $stageDir $dll))) {
+                    throw "Required VC++ runtime DLL was not staged: $dll"
                 }
             }
             # Universal CRT (api-ms-win-crt-*) sits at C:\Windows\System32 on
@@ -89,7 +101,7 @@ if ($vcRoot) {
         Write-Warning "Could not locate VC redist MSVC directory; VC++ runtime DLLs not bundled."
     }
 } else {
-    Write-Warning "Visual Studio 2022 not found; VC++ runtime DLLs not bundled."
+    throw "Visual Studio 2022 not found; cannot produce a self-contained bundle."
 }
 
 # 3. Run windeployqt — installs Qt runtime DLLs, QML modules, platform plugins.

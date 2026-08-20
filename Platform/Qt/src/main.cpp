@@ -172,6 +172,19 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // CI launches the fully staged application with this flag. Reaching this
+    // point proves that Windows loaded the executable and its runtime DLLs,
+    // the QML module was found, and Component.onCompleted reached the Rust
+    // core-backed workspace load without reporting an error.
+    if (app.arguments().contains(QStringLiteral("--smoke-test"))) {
+        if (!controller.lastError().isEmpty()) {
+            qCritical().noquote() << "Smoke test failed:" << controller.lastError();
+            return 2;
+        }
+        qInfo() << "Windows bundle smoke test passed";
+        return 0;
+    }
+
     // workspace.projects is populated by QML's own Component.onCompleted;
     // main.cpp no longer needs to call controller.load() here.
     return app.exec();

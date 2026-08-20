@@ -77,6 +77,15 @@ jobs:
         shell: pwsh
         run: ./Scripts/build-windows-app.ps1
 
+      - name: Smoke-test staged Windows bundle
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE "Distribution/Windows/fs-user-stories/fs-user-stories.exe"
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Windows bundle smoke test failed with exit code $($process.ExitCode)"
+          }
+
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
