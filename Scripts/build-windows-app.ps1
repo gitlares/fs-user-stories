@@ -12,8 +12,8 @@
         systems without VC++ Redist installed).
 
     Produces:
-      * Distribution/Windows/fs-user-stories-windows.zip (extracted folder bundle)
-      * Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha.exe (NSIS installer)
+      * Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha-x64.exe
+        (single-file NSIS installer for Windows x64)
 #>
 
 $ErrorActionPreference = "Stop"
@@ -135,14 +135,20 @@ Data location (first run will create):
 $readmePath = Join-Path $stageDir "README.txt"
 Set-Content -Path $readmePath -Value $readme -Encoding UTF8
 
-# 5. Zip up the staged directory.
-$zipPath = Join-Path $outRoot "fs-user-stories-windows.zip"
-if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Compress-Archive -Path $stageDir -DestinationPath $zipPath -CompressionLevel Optimal
-Write-Host "==> Created $zipPath"
-Get-Item $zipPath | Select-Object FullName, Length
+# 5. Build one installer. Testers should never launch the executable from a
+#    compressed-folder view because Windows extracts only part of the Qt bundle
+#    and then reports misleading "Qt6*.dll was not found" errors.
+$makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+if (-not $makensis) {
+    throw "makensis.exe not found; install NSIS before packaging."
+}
 
-# 6. NSIS installer — disabled until the path resolution above is fixed.
-#    The zip Distribution/Windows/fs-user-stories-windows.zip is the primary
-#    distributable for now. Re-enable after installers are reliable.
-Write-Host "==> Skipping NSIS installer (zipped bundle is the deliverable)."
+$installerPath = Join-Path $outRoot "FSUserStoriesSetup-0.1.0-alpha-x64.exe"
+if (Test-Path $installerPath) { Remove-Item -Force $installerPath }
+
+$installerScript = Join-Path $projectRoot "Scripts/installer.nsi"
+Write-Host "==> Building x64 installer: $installerPath"
+& $makensis.Source "/DPACKAGE_DIR=$outRoot" "/DOUTPUT_FILE=$installerPath" $installerScript
+if ($LASTEXITCODE -ne 0) { throw "makensis failed" }
+if (-not (Test-Path $installerPath)) { throw "Installer was not created: $installerPath" }
+Get-Item $installerPath | Select-Object FullName, Length

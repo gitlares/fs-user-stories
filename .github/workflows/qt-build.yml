@@ -39,6 +39,10 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+
       - name: Locate Visual Studio
         id: vs
         shell: pwsh
@@ -73,23 +77,31 @@ jobs:
           cmake --build Platform\Qt\build --parallel
           if errorlevel 1 exit /b 1
 
-      - name: Bundle + zip
+      - name: Bundle + installer
         shell: pwsh
         run: ./Scripts/build-windows-app.ps1
 
-      - name: Smoke-test staged Windows bundle
+      - name: Install and smoke-test packaged application
         shell: pwsh
         run: |
-          $exe = Join-Path $env:GITHUB_WORKSPACE "Distribution/Windows/fs-user-stories/fs-user-stories.exe"
+          $installer = Join-Path $env:GITHUB_WORKSPACE "Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha-x64.exe"
+          $install = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Windows installer failed with exit code $($install.ExitCode)"
+          }
+          $exe = Join-Path $env:LOCALAPPDATA "Programs/FS User Stories/fs-user-stories.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Installed executable was not found: $exe"
+          }
           $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
           if ($process.ExitCode -ne 0) {
-            throw "Windows bundle smoke test failed with exit code $($process.ExitCode)"
+            throw "Installed Windows application failed with exit code $($process.ExitCode)"
           }
 
-      - name: Upload zip artifact
+      - name: Upload tested x64 installer
         uses: actions/upload-artifact@v4
         with:
-          name: fs-user-stories-windows
-          path: Distribution/**/*.zip
+          name: fs-user-stories-windows-x64-installer
+          path: Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha-x64.exe
           if-no-files-found: error
           retention-days: 14

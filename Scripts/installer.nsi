@@ -10,50 +10,64 @@ SetCompressor /SOLID lzma
 !define APPVERSION   "0.1.0-alpha"
 !define PUBLISHER    "Pulser"
 !define DESCRIPTION  "Local, offline-first user stories."
-!define INSTALLDIR   "$PROGRAMFILES64\FS User Stories"
+!define INSTALLDIR   "$LOCALAPPDATA\Programs\FS User Stories"
+
+!ifndef PACKAGE_DIR
+  !define PACKAGE_DIR "Distribution\Windows"
+!endif
+
+!ifndef OUTPUT_FILE
+  !define OUTPUT_FILE "Distribution\Windows\FSUserStoriesSetup-${APPVERSION}-x64.exe"
+!endif
 
 Name       "${APPNAME} ${APPVERSION}"
-OutFile    "Distribution\FSUserStoriesSetup-${APPVERSION}.exe"
+OutFile    "${OUTPUT_FILE}"
 InstallDir "${INSTALLDIR}"
-RequestExecutionLevel admin
+RequestExecutionLevel user
 
 !include "MUI2.nsh"
 
 !define MUI_ABORTWARNING
 !define MUI_ICON   "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
 !define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\fs-user-stories.exe"
 
+!insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Install"
   SectionIn RO
   SetOutPath "$INSTDIR"
   ; /r recurses subdirectories; xp preserves long paths
-  File /r "Distribution\Windows\fs-user-stories\*.*"
+  File /r "${PACKAGE_DIR}\fs-user-stories\*.*"
 
   ; Start menu entry
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CreateShortcut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" \
                  "$INSTDIR\fs-user-stories.exe"
+  CreateShortcut "$DESKTOP\${APPNAME}.lnk" \
+                 "$INSTDIR\fs-user-stories.exe"
 
   ; Uninstall program
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "DisplayName" "${APPNAME}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "DisplayVersion" "${APPVERSION}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "Publisher" "${PUBLISHER}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "InstallLocation" "$INSTDIR"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
                "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
 SectionEnd
 
 Section "Uninstall"
+  Delete "$DESKTOP\${APPNAME}.lnk"
   RMDir /r "$INSTDIR"
   RMDir /r "$SMPROGRAMS\${APPNAME}"
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 SectionEnd
