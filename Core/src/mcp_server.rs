@@ -9,7 +9,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     thread,
     time::Duration,
 };
@@ -1040,6 +1040,7 @@ fn workspace_project_from_snapshot(
                     .remove("archiveRelativePath")
                     .and_then(|value| value.as_str().map(str::to_owned))
                     .ok_or("Invalid shared attachment path")?;
+                let archive_path = safe_archive_attachment_path(&archive_path)?;
                 let relative_path =
                     managed_attachment_path(&snapshot.project_id, &story_id, &id, &filename);
                 let source = previous
@@ -1392,6 +1393,19 @@ fn archive_attachment_path(story_id: &str, attachment_id: &str, filename: &str) 
     )
 }
 
+fn safe_archive_attachment_path(value: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        Err("The shared attachment path is unsafe".into())
+    } else {
+        Ok(path)
+    }
+}
+
 fn repository_directory_name(project_id: &str) -> String {
     format!("p-{}", stable_path_component(project_id, 24))
 }
@@ -1631,6 +1645,8 @@ mod tests {
         assert!(archived.ends_with(".png"));
         assert!(!managed.contains("CON"));
         assert!(!archived.contains(' '));
+        assert!(safe_archive_attachment_path("../outside.png").is_err());
+        assert!(safe_archive_attachment_path(&archived).is_ok());
         assert_eq!(
             repository_directory_name("project-with-a-long-user-controlled-identifier").len(),
             26
