@@ -18,7 +18,7 @@ QString CorePaths::xdgDataHome()
     return QDir::homePath() + QStringLiteral("/.local/share");
 #elif defined(Q_OS_WIN)
     // %LOCALAPPDATA%\fs-user-stories  (independent from org/app names).
-    const QString local = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString local = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return local.isEmpty() ? QDir::homePath() + QStringLiteral("/AppData/Local") : local;
 #else
     // macOS / other Unix: use the per-user app-local data directory

@@ -703,7 +703,8 @@ pub fn join_stored_project(
 ) -> Result<Value, CoreError> {
     let remote_url = crate::invitation::normalize_remote_url(&remote_url)?;
     fs::create_dir_all(&repositories_root)?;
-    let temporary_path = repositories_root.join(format!("Import-{}", Uuid::new_v4()));
+    let import_id = Uuid::new_v4().simple().to_string();
+    let temporary_path = repositories_root.join(format!("i-{}", &import_id[..12]));
     let snapshot =
         match RepositoryEngine::clone_shared(&remote_url, &temporary_path, access_token.as_deref())
         {
@@ -713,7 +714,7 @@ pub fn join_stored_project(
                 return Err(error);
             }
         };
-    let final_path = repositories_root.join(&snapshot.project_id);
+    let final_path = repositories_root.join(repository_directory_name(&snapshot.project_id));
     let config = MCPServerConfig {
         database_path,
         attachments_root,
@@ -798,7 +799,7 @@ pub fn import_stored_attachments(
             )));
         }
         let id = Uuid::new_v4().to_string().to_uppercase();
-        let relative_path = format!("{project_id}/{story_id}/{id}-{}", safe_filename(&filename));
+        let relative_path = managed_attachment_path(&project_id, &story_id, &id, &filename);
         let destination = config.attachments_root.join(&relative_path);
         fs::create_dir_all(
             destination.parent().ok_or_else(|| {
@@ -960,12 +961,7 @@ fn project_snapshot(project: &WorkspaceProject) -> Result<ProjectSnapshot, Strin
                 object.remove("relativePath");
                 object.insert(
                     "archiveRelativePath".into(),
-                    Value::String(format!(
-                        "attachments/{}/{}-{}",
-                        story.id,
-                        id,
-                        safe_filename(&filename)
-                    )),
+                    Value::String(archive_attachment_path(&story.id, &id, &filename)),
                 );
             }
             Ok(value)
@@ -988,12 +984,7 @@ fn attachment_sources(project: &WorkspaceProject, config: &MCPServerConfig) -> A
         .flat_map(|story| {
             story.attachments.iter().map(move |attachment| {
                 (
-                    format!(
-                        "attachments/{}/{}-{}",
-                        story.id,
-                        attachment.id,
-                        safe_filename(&attachment.filename)
-                    ),
+                    archive_attachment_path(&story.id, &attachment.id, &attachment.filename),
                     config
                         .attachments_root
                         .join(&attachment.relative_path)
@@ -1049,13 +1040,8 @@ fn workspace_project_from_snapshot(
                     .remove("archiveRelativePath")
                     .and_then(|value| value.as_str().map(str::to_owned))
                     .ok_or("Invalid shared attachment path")?;
-                let relative_path = format!(
-                    "{}/{}/{}-{}",
-                    snapshot.project_id,
-                    story_id,
-                    id,
-                    safe_filename(&filename)
-                );
+                let relative_path =
+                    managed_attachment_path(&snapshot.project_id, &story_id, &id, &filename);
                 let source = previous
                     .git_repository
                     .as_ref()
@@ -1231,7 +1217,7 @@ fn add_attachments(
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("attachment");
-        let relative_path = format!("{project_id}/{story_id}/{id}-{}", safe_filename(filename));
+        let relative_path = managed_attachment_path(project_id, story_id, &id, filename);
         let destination = config.attachments_root.join(&relative_path);
         fs::create_dir_all(destination.parent().expect("attachment has parent"))
             .map_err(|error| error.to_string())?;
@@ -1354,22 +1340,60 @@ fn status(value: &str) -> Result<StoryStatus, String> {
         _ => Err("status must be draft, active, or done".into()),
     }
 }
-fn safe_filename(value: &str) -> String {
-    let filename = value
-        .chars()
-        .map(|character| {
-            if character.is_alphanumeric() || matches!(character, '.' | '-' | '_' | ' ') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    if filename.trim().is_empty() {
-        "attachment".into()
+fn stable_path_component(value: &str, length: usize) -> String {
+    let digest = format!("{:x}", Sha256::digest(value.as_bytes()));
+    digest[..length.min(digest.len())].to_owned()
+}
+
+fn safe_extension(filename: &str) -> Option<String> {
+    let extension = Path::new(filename)
+        .extension()
+        .and_then(|value| value.to_str())?
+        .to_ascii_lowercase();
+    if extension.is_empty()
+        || extension.len() > 10
+        || !extension
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+    {
+        None
     } else {
-        filename
+        Some(extension)
     }
+}
+
+fn attachment_storage_name(id: &str, filename: &str) -> String {
+    let stem = stable_path_component(id, 32);
+    match safe_extension(filename) {
+        Some(extension) => format!("{stem}.{extension}"),
+        None => stem,
+    }
+}
+
+fn managed_attachment_path(
+    project_id: &str,
+    story_id: &str,
+    attachment_id: &str,
+    filename: &str,
+) -> String {
+    format!(
+        "{}/{}/{}",
+        stable_path_component(project_id, 24),
+        stable_path_component(story_id, 24),
+        attachment_storage_name(attachment_id, filename)
+    )
+}
+
+fn archive_attachment_path(story_id: &str, attachment_id: &str, filename: &str) -> String {
+    format!(
+        "attachments/{}/{}",
+        stable_path_component(story_id, 24),
+        attachment_storage_name(attachment_id, filename)
+    )
+}
+
+fn repository_directory_name(project_id: &str) -> String {
+    format!("p-{}", stable_path_component(project_id, 24))
 }
 fn content_type(path: &Path) -> String {
     match path
@@ -1586,6 +1610,34 @@ mod tests {
     }
 
     #[test]
+    fn attachment_paths_are_short_stable_and_cross_platform_safe() {
+        let unsafe_name =
+            "CON: Screenshot <draft> with a deliberately very long visible name...?*.PNG";
+        let managed = managed_attachment_path(
+            "project-with-a-long-user-controlled-identifier",
+            "story-with-a-long-user-controlled-identifier",
+            "attachment-with-a-long-user-controlled-identifier",
+            unsafe_name,
+        );
+        let archived = archive_attachment_path(
+            "story-with-a-long-user-controlled-identifier",
+            "attachment-with-a-long-user-controlled-identifier",
+            unsafe_name,
+        );
+
+        assert_eq!(managed.len(), 86);
+        assert_eq!(archived.len(), 73);
+        assert!(managed.ends_with(".png"));
+        assert!(archived.ends_with(".png"));
+        assert!(!managed.contains("CON"));
+        assert!(!archived.contains(' '));
+        assert_eq!(
+            repository_directory_name("project-with-a-long-user-controlled-identifier").len(),
+            26
+        );
+    }
+
+    #[test]
     fn rust_imports_and_removes_managed_attachments_with_sqlite_as_source_of_truth() {
         let directory = tempdir().expect("temporary directory");
         let config = MCPServerConfig {
@@ -1622,7 +1674,11 @@ mod tests {
         .project;
         save_updated_project(&config, project.clone()).expect("save story");
         let story_id = project.stories[0].id.clone();
-        let source = directory.path().join("example.txt");
+        let filename = format!(
+            "{}2026-08-13 at 7.22.30 p.m..PNG",
+            "Screenshot with a long visible name ".repeat(5)
+        );
+        let source = directory.path().join(&filename);
         fs::write(&source, b"managed attachment").expect("source file");
 
         let value = import_stored_attachments(
@@ -1636,6 +1692,10 @@ mod tests {
         let imported: WorkspaceProject =
             serde_json::from_value(value["project"].clone()).expect("project result");
         let attachment = &imported.stories[0].attachments[0];
+        assert_eq!(attachment.filename, filename);
+        assert!(attachment.relative_path.len() <= 90);
+        assert!(attachment.relative_path.ends_with(".png"));
+        assert!(!attachment.relative_path.contains("Screenshot"));
         assert!(
             config
                 .attachments_root

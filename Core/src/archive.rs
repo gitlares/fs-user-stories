@@ -89,9 +89,22 @@ impl ProjectSnapshot {
         write_entities(&temporary.join("profiles"), &self.actors)?;
         write_entities(&temporary.join("stories"), &self.stories)?;
         fs::write(temporary.join("README.md"), self.readme())?;
-        let existing_attachments = root.join("attachments");
-        if existing_attachments.exists() {
-            copy_directory(&existing_attachments, &temporary.join("attachments"))?;
+        // Preserve only attachments still referenced by the snapshot. Sources
+        // supplied by the workspace replace them below, while legacy orphaned
+        // paths (including paths that embedded long filenames) disappear.
+        for relative_path in self.referenced_attachment_paths()? {
+            if attachment_sources.contains_key(&relative_path) {
+                continue;
+            }
+            let relative_path = safe_relative_path(&relative_path)?;
+            let source = root.join(relative_path);
+            if source.is_file() {
+                let destination = temporary.join(relative_path);
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::copy(source, destination)?;
+            }
         }
         for (relative_path, source_path) in attachment_sources {
             let relative_path = safe_relative_path(relative_path)?;
@@ -133,20 +146,26 @@ impl ProjectSnapshot {
             self.stories.len()
         )
     }
-}
 
-fn copy_directory(source: &Path, destination: &Path) -> Result<(), CoreError> {
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let destination_path = destination.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_directory(&entry.path(), &destination_path)?;
-        } else if entry.file_type()?.is_file() {
-            fs::copy(entry.path(), destination_path)?;
+    fn referenced_attachment_paths(&self) -> Result<Vec<String>, CoreError> {
+        let mut paths = Vec::new();
+        for story in &self.stories {
+            let Some(attachments) = story.get("attachments").and_then(Value::as_array) else {
+                continue;
+            };
+            for attachment in attachments {
+                let path = attachment
+                    .get("archiveRelativePath")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        CoreError::InvalidArchive("Attachment archive path is missing".into())
+                    })?;
+                safe_relative_path(path)?;
+                paths.push(path.to_owned());
+            }
         }
+        Ok(paths)
     }
-    Ok(())
 }
 
 fn safe_relative_path(value: &str) -> Result<&Path, CoreError> {
@@ -250,5 +269,43 @@ mod tests {
                 .exists()
         );
         assert_eq!(ProjectSnapshot::read(directory.path()).unwrap(), snapshot);
+    }
+
+    #[test]
+    fn archive_replaces_legacy_attachment_paths_without_leaving_orphans() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("source.png");
+        fs::write(&source, b"image").unwrap();
+        let legacy_path = "attachments/story/attachment-Screenshot with a very long name.png";
+        let canonical_path =
+            "attachments/0123456789abcdef01234567/0123456789abcdef0123456789abcdef.png";
+        let snapshot = |path: &str| ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![],
+            stories: vec![json!({
+                "id": "story",
+                "title": "Attachment migration",
+                "attachments": [{"id": "attachment", "archiveRelativePath": path}]
+            })],
+        };
+
+        let mut sources = AttachmentSources::new();
+        sources.insert(legacy_path.into(), source.to_string_lossy().into_owned());
+        snapshot(legacy_path)
+            .write_with_attachments(directory.path(), &sources)
+            .unwrap();
+
+        sources.clear();
+        sources.insert(canonical_path.into(), source.to_string_lossy().into_owned());
+        snapshot(canonical_path)
+            .write_with_attachments(directory.path(), &sources)
+            .unwrap();
+
+        let root = directory.path().join(ARCHIVE_DIRECTORY);
+        assert!(!root.join(legacy_path).exists());
+        assert!(root.join(canonical_path).exists());
     }
 }
