@@ -63,9 +63,12 @@ Item {
         anchors.fill: parent
         visible: storyId !== ""
         clip: true
+        contentWidth: Math.max(480, availableWidth)
+        contentHeight: storyContent.implicitHeight + 68
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         ColumnLayout {
+            id: storyContent
             width: Math.min(720, Math.max(480, root.width - 72))
             x: Math.max(36, (root.width - width) / 2)
             y: 34; spacing: 26
