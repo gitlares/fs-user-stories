@@ -482,7 +482,10 @@ ApplicationWindow {
             ScrollView {
                 visible: exportScope.currentIndex === 4
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                contentWidth: availableWidth
+                contentHeight: exportStoriesColumn.implicitHeight
                 ColumnLayout {
+                    id: exportStoriesColumn
                     width: parent.width; spacing: 4
                     Repeater {
                         model: workspace.currentProject.stories || []
@@ -536,7 +539,10 @@ ApplicationWindow {
             }
             ScrollView {
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                contentWidth: availableWidth
+                contentHeight: importedStoriesColumn.implicitHeight
                 ColumnLayout {
+                    id: importedStoriesColumn
                     width: parent.width; spacing: 4
                     Repeater {
                         model: workspace.pendingImportStories
