@@ -126,7 +126,7 @@ ApplicationWindow {
                     MenuItem {
                         text: qsTr("Export to Markdown…")
                         enabled: workspace.currentProjectId !== ""
-                        onTriggered: exportDialog.open()
+                        onTriggered: exportOptionsDialog.open()
                     }
                     MenuItem {
                         text: qsTr("Import from Markdown…")
@@ -423,13 +423,140 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         title: qsTr("Export stories to Markdown")
         nameFilters: ["Markdown files (*.md)"]
-        onAccepted: workspace.exportMarkdown(selectedFile)
+        onAccepted: workspace.exportMarkdownSelection(
+                        selectedFile,
+                        ["all", "active", "done", "draft", "selected"][exportScope.currentIndex],
+                        exportOptionsDialog.selectedStoryIds())
     }
     FileDialog {
         id: importDialog
         fileMode: FileDialog.OpenFile
         title: qsTr("Import stories from Markdown")
         nameFilters: ["Markdown files (*.md)"]
-        onAccepted: workspace.importMarkdown(selectedFile)
+        onAccepted: {
+            if (workspace.prepareMarkdownImport(selectedFile))
+                importReviewDialog.open()
+        }
+    }
+
+    Dialog {
+        id: exportOptionsDialog
+        property var selectedStories: ({})
+        title: qsTr("Export Stories")
+        modal: true; anchors.centerIn: parent; width: 560; height: 560
+        onOpened: { exportScope.currentIndex = 0; selectedStories = ({}) }
+        function selectedStoryIds() {
+            var ids = []
+            var stories = workspace.currentProject.stories || []
+            if (exportScope.currentIndex !== 4) return ids
+            for (var i = 0; i < stories.length; i++)
+                if (selectedStories[stories[i].id]) ids.push(stories[i].id)
+            return ids
+        }
+        contentItem: ColumnLayout {
+            spacing: 14
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: theme.secondaryText
+                text: qsTr("Create one Markdown file. Attachments are not included.")
+            }
+            Label { text: qsTr("Stories to Export"); font.weight: Font.DemiBold }
+            MacComboBox {
+                id: exportScope; Layout.fillWidth: true
+                model: [qsTr("All Stories"), qsTr("Active"), qsTr("Completed"), qsTr("Drafts"), qsTr("Selected Stories")]
+            }
+            Label {
+                visible: exportScope.currentIndex !== 4
+                text: qsTr("The matching stories will be included in the file.")
+                color: theme.secondaryText
+            }
+            ScrollView {
+                visible: exportScope.currentIndex === 4
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                ColumnLayout {
+                    width: parent.width; spacing: 4
+                    Repeater {
+                        model: workspace.currentProject.stories || []
+                        delegate: CheckBox {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            text: (workspace.currentProject.prefix || "") + "-" + modelData.number + " — " + modelData.title
+                            onToggled: {
+                                exportOptionsDialog.selectedStories[modelData.id] = checked
+                                exportOptionsDialog.selectedStories = Object.assign({}, exportOptionsDialog.selectedStories)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        footer: DialogButtonBox {
+            Button { text: qsTr("Cancel"); onClicked: exportOptionsDialog.close() }
+            Button {
+                text: qsTr("Export…")
+                enabled: exportScope.currentIndex !== 4 || exportOptionsDialog.selectedStoryIds().length > 0
+                onClicked: { exportOptionsDialog.close(); exportDialog.open() }
+            }
+        }
+    }
+
+    Dialog {
+        id: importReviewDialog
+        property var selectedStories: ({})
+        title: qsTr("Review Imported Stories")
+        modal: true; anchors.centerIn: parent; width: 600; height: 580
+        onOpened: {
+            var selected = ({})
+            for (var i = 0; i < workspace.pendingImportStories.length; i++)
+                selected[workspace.pendingImportStories[i].id] = true
+            selectedStories = selected
+        }
+        function selectedStoryIds() {
+            var ids = []
+            for (var i = 0; i < workspace.pendingImportStories.length; i++) {
+                var story = workspace.pendingImportStories[i]
+                if (selectedStories[story.id]) ids.push(story.id)
+            }
+            return ids
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: theme.secondaryText
+                text: qsTr("Choose the stories to add. Existing attachments are not imported.")
+            }
+            ScrollView {
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                ColumnLayout {
+                    width: parent.width; spacing: 4
+                    Repeater {
+                        model: workspace.pendingImportStories
+                        delegate: CheckBox {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            checked: Boolean(importReviewDialog.selectedStories[modelData.id])
+                            text: (modelData.originalReference || qsTr("Story")) + " — " + modelData.title
+                            onToggled: {
+                                importReviewDialog.selectedStories[modelData.id] = checked
+                                importReviewDialog.selectedStories = Object.assign({}, importReviewDialog.selectedStories)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Cancel")
+                onClicked: { workspace.cancelPreparedMarkdownImport(); importReviewDialog.close() }
+            }
+            Button {
+                text: qsTr("Import Selected")
+                enabled: importReviewDialog.selectedStoryIds().length > 0
+                onClicked: {
+                    if (workspace.applyPreparedMarkdownImport(importReviewDialog.selectedStoryIds()))
+                        importReviewDialog.close()
+                }
+            }
+        }
     }
 }

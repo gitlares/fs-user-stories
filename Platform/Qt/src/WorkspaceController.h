@@ -33,6 +33,7 @@ class WorkspaceController : public QObject
     Q_PROPERTY(bool mcpServerActive READ mcpServerActive NOTIFY mcpServerStateChanged)
     Q_PROPERTY(QString mcpServerUrl READ mcpServerUrl CONSTANT)
     Q_PROPERTY(QVariantList pendingSyncConflicts READ pendingSyncConflicts NOTIFY pendingSyncConflictsChanged)
+    Q_PROPERTY(QVariantList pendingImportStories READ pendingImportStories NOTIFY pendingImportStoriesChanged)
 
 public:
     explicit WorkspaceController(QObject *parent = nullptr);
@@ -58,6 +59,7 @@ public:
     bool mcpServerActive() const { return m_mcpServerActive; }
     QString mcpServerUrl() const { return QStringLiteral("http://127.0.0.1:49231/mcp"); }
     QVariantList pendingSyncConflicts() const { return m_pendingSyncConflicts; }
+    QVariantList pendingImportStories() const { return m_pendingImportStories; }
     void setMcpServerActive(bool active);
 
     Q_INVOKABLE void load();
@@ -110,7 +112,13 @@ public:
     Q_INVOKABLE bool inviteGitHubCollaborator(const QString &username);
     Q_INVOKABLE QString createInvitation();
     Q_INVOKABLE void exportMarkdown(const QUrl &targetFile);
+    Q_INVOKABLE void exportMarkdownSelection(const QUrl &targetFile,
+                                             const QString &scope,
+                                             const QVariantList &storyIds);
     Q_INVOKABLE void importMarkdown(const QUrl &sourceFile);
+    Q_INVOKABLE bool prepareMarkdownImport(const QUrl &sourceFile);
+    Q_INVOKABLE bool applyPreparedMarkdownImport(const QVariantList &storyIds);
+    Q_INVOKABLE void cancelPreparedMarkdownImport();
     Q_INVOKABLE void copyMcpServerUrl();
 
     /// Decodes an invitation code and imports its shared Git repository.
@@ -127,6 +135,7 @@ signals:
     void info(const QString &message);
     void syncConflicts(const QVariantList &conflicts);
     void pendingSyncConflictsChanged();
+    void pendingImportStoriesChanged();
     void githubAuthorizationChanged();
     void mcpServerStateChanged();
 
@@ -150,6 +159,8 @@ private:
     QString m_currentProjectId;
     QVariantMap m_currentProject;
     QVariantList m_pendingSyncConflicts;
+    QVariantList m_pendingImportStories;
+    QString m_pendingImportPath;
     QVariantMap m_pendingAuthorization;
     QString m_pendingRemoteUrl;
     bool m_pendingGitHubCreation = false;

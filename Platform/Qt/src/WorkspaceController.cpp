@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QUrl>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcWorkspace, "fsuserstories.workspace")
 
@@ -942,6 +943,13 @@ bool WorkspaceController::joinInvitationRemote(const QString &remoteUrl,
 
 void WorkspaceController::exportMarkdown(const QUrl &targetFile)
 {
+    exportMarkdownSelection(targetFile, QStringLiteral("all"), {});
+}
+
+void WorkspaceController::exportMarkdownSelection(const QUrl &targetFile,
+                                                  const QString &scope,
+                                                  const QVariantList &storyIds)
+{
     if (!m_client || m_currentProjectId.isEmpty()) {
         return;
     }
@@ -950,6 +958,14 @@ void WorkspaceController::exportMarkdown(const QUrl &targetFile)
     const QString prefix = m_currentProject.value("prefix").toString();
     for (const QVariant &storyValue : m_currentProject.value("stories").toList()) {
         const QVariantMap story = storyValue.toMap();
+        const QString storyId = story.value("id").toString();
+        const QString status = story.value("status").toString();
+        if ((scope == QLatin1String("active") && status != QLatin1String("active"))
+            || (scope == QLatin1String("draft") && status != QLatin1String("draft"))
+            || (scope == QLatin1String("done") && status != QLatin1String("done"))
+            || (scope == QLatin1String("selected") && !storyIds.contains(storyId))) {
+            continue;
+        }
         const QString actorId = story.value("actorId").toString();
         QVariantMap actor;
         for (const QVariant &actorValue : m_currentProject.value("actors").toList()) {
@@ -1002,14 +1018,26 @@ void WorkspaceController::exportMarkdown(const QUrl &targetFile)
 
 void WorkspaceController::importMarkdown(const QUrl &sourceFile)
 {
-    if (!m_client || m_currentProjectId.isEmpty()) {
+    if (!prepareMarkdownImport(sourceFile)) {
         return;
+    }
+    QVariantList storyIds;
+    for (const QVariant &story : std::as_const(m_pendingImportStories)) {
+        storyIds.append(story.toMap().value("id"));
+    }
+    applyPreparedMarkdownImport(storyIds);
+}
+
+bool WorkspaceController::prepareMarkdownImport(const QUrl &sourceFile)
+{
+    if (!m_client || m_currentProjectId.isEmpty()) {
+        return false;
     }
     const QString path = sourceFile.isLocalFile() ? sourceFile.toLocalFile() : sourceFile.toString();
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         setError(tr("The import file could not be read: %1").arg(file.errorString()));
-        return;
+        return false;
     }
     setError({});
     setBusy(true);
@@ -1020,17 +1048,48 @@ void WorkspaceController::importMarkdown(const QUrl &sourceFile)
     setBusy(false);
     if (!reply.value("ok").toBool()) {
         setError(reply.value("error").toMap().value("message").toString());
-        return;
+        return false;
     }
-    const QVariantList stories = reply.value("result").toMap().value("stories").toList();
+    m_pendingImportStories = reply.value("result").toMap().value("stories").toList();
+    m_pendingImportPath = path;
+    emit pendingImportStoriesChanged();
+    return !m_pendingImportStories.isEmpty();
+}
+
+bool WorkspaceController::applyPreparedMarkdownImport(const QVariantList &storyIds)
+{
+    QVariantList stories;
+    for (const QVariant &storyValue : std::as_const(m_pendingImportStories)) {
+        const QVariantMap story = storyValue.toMap();
+        if (storyIds.contains(story.value("id"))) {
+            stories.append(story);
+        }
+    }
+    if (stories.isEmpty()) {
+        setError(tr("Select at least one story to import."));
+        return false;
+    }
     if (!applyCurrentOperation({
             {"operation", "import_stories"},
             {"stories", stories},
             {"imported_profile_name", tr("Imported Profile")},
         })) {
+        return false;
+    }
+    const QString path = m_pendingImportPath;
+    cancelPreparedMarkdownImport();
+    emit info(tr("Imported from %1").arg(path));
+    return true;
+}
+
+void WorkspaceController::cancelPreparedMarkdownImport()
+{
+    if (m_pendingImportStories.isEmpty() && m_pendingImportPath.isEmpty()) {
         return;
     }
-    emit info(tr("Imported from %1").arg(path));
+    m_pendingImportStories.clear();
+    m_pendingImportPath.clear();
+    emit pendingImportStoriesChanged();
 }
 
 void WorkspaceController::setMcpServerActive(bool active)
