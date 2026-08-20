@@ -838,8 +838,8 @@ bool WorkspaceController::acceptInvitation(const QString &invitationToken)
         return false;
     }
     emit githubAuthorizationChanged();
-    QDesktopServices::openUrl(QUrl(githubAuthorizationUrl()));
-    emit info(tr("Authorize GitHub in the browser, then return and choose Continue."));
+    QGuiApplication::clipboard()->setText(githubAuthorizationCode());
+    emit info(tr("The GitHub code was copied. Choose Open GitHub, authorize it, then Continue."));
     return false;
 }
 
