@@ -172,7 +172,7 @@ pub fn invite_collaborator(
         access_token,
         json!({"permission": "push"}),
     )?;
-    ensure_status(&response, &[201, 204])
+    ensure_collaborator_invite_status(&response)
 }
 
 fn is_github_username(value: &str) -> bool {
@@ -270,6 +270,42 @@ fn ensure_status(response: &ApiResponse, expected: &[u16]) -> Result<(), CoreErr
                 .map(str::to_owned)
         })
         .unwrap_or_else(|| format!("GitHub returned HTTP {}", response.status));
+    Err(CoreError::GitHubApi(message))
+}
+
+fn ensure_collaborator_invite_status(response: &ApiResponse) -> Result<(), CoreError> {
+    if [201, 204].contains(&response.status) {
+        return Ok(());
+    }
+
+    let github_message = serde_json::from_slice::<Value>(&response.body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("message")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        });
+
+    let message = match response.status {
+        401 | 403 => {
+            "No tienes permisos para invitar colaboradores en este repositorio. Debe hacerlo el propietario o un administrador del repositorio.".to_owned()
+        }
+        404 => {
+            "No se encontró el repositorio o el usuario de GitHub. Comprueba el nombre exacto y tus permisos.".to_owned()
+        }
+        422 => {
+            format!(
+                "GitHub rechazó la invitación. Comprueba que el usuario exista, que no seas tú mismo y que no haya una invitación pendiente.{}",
+                github_message
+                    .filter(|message| message != "Validation Failed")
+                    .map(|message| format!(" Detalle: {message}"))
+                    .unwrap_or_default()
+            )
+        }
+        _ => github_message.unwrap_or_else(|| format!("GitHub returned HTTP {}", response.status)),
+    };
+
     Err(CoreError::GitHubApi(message))
 }
 
