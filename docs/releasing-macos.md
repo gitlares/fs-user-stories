@@ -1,4 +1,4 @@
-# Releasing the macOS Alpha
+# Releasing FS User Stories 1.0.2 for macOS
 
 FS User Stories deliberately separates reproducible packaging from release-owner
 operations. The packaging script never accesses a signing identity, Apple ID,
@@ -9,13 +9,13 @@ notarization credential, or Git credential.
 From the repository root:
 
 ```sh
-./Scripts/package-alpha.sh
+./Scripts/package-release.sh
 ```
 
 This creates:
 
 - `Distribution/FS User Stories.app`
-- `Distribution/FS-User-Stories-Alpha.dmg`
+- `Distribution/FS-User-Stories-1.0.2.dmg`
 
 Both artifacts currently target Apple Silicon.
 
@@ -52,7 +52,7 @@ can be performed with the repository helper after reviewing its inputs:
 FS_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 FS_SIGNING_KEYCHAIN="/absolute/path/to/signing.keychain-db" \
 FS_NOTARY_PROFILE="FSUserStories-Notary" \
-./Scripts/sign-and-notarize-alpha.sh
+./Scripts/sign-and-notarize-release.sh
 ```
 
 ## 3. Recreate and sign the DMG manually
@@ -61,18 +61,18 @@ After signing the application, recreate the disk image so it contains the signed
 bundle:
 
 ```sh
-rm "Distribution/FS-User-Stories-Alpha.dmg"
+rm "Distribution/FS-User-Stories-1.0.2.dmg"
 staging_dir=$(mktemp -d "${TMPDIR:-/tmp}/fs-user-stories-release.XXXXXX")
 cp -R "Distribution/FS User Stories.app" "$staging_dir/"
 ln -s /Applications "$staging_dir/Applications"
-hdiutil create -volname "FS User Stories Alpha" \
+hdiutil create -volname "FS User Stories 1.0.2" \
   -srcfolder "$staging_dir" -format UDZO -ov \
-  "Distribution/FS-User-Stories-Alpha.dmg"
+  "Distribution/FS-User-Stories-1.0.2.dmg"
 rm -rf "$staging_dir"
 
 codesign --force --timestamp \
   --sign "$FS_SIGNING_IDENTITY" \
-  "Distribution/FS-User-Stories-Alpha.dmg"
+  "Distribution/FS-User-Stories-1.0.2.dmg"
 ```
 
 ## 4. Notarize and staple manually
@@ -80,13 +80,13 @@ codesign --force --timestamp \
 Create a Keychain profile once using `xcrun notarytool store-credentials`, then:
 
 ```sh
-xcrun notarytool submit "Distribution/FS-User-Stories-Alpha.dmg" \
+xcrun notarytool submit "Distribution/FS-User-Stories-1.0.2.dmg" \
   --keychain-profile "FSUserStories-Notary" --wait
 
-xcrun stapler staple "Distribution/FS-User-Stories-Alpha.dmg"
-xcrun stapler validate "Distribution/FS-User-Stories-Alpha.dmg"
+xcrun stapler staple "Distribution/FS-User-Stories-1.0.2.dmg"
+xcrun stapler validate "Distribution/FS-User-Stories-1.0.2.dmg"
 spctl --assess --type open --context context:primary-signature \
-  --verbose=2 "Distribution/FS-User-Stories-Alpha.dmg"
+  --verbose=2 "Distribution/FS-User-Stories-1.0.2.dmg"
 ```
 
 ## 5. Publish manually

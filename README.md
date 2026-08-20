@@ -52,9 +52,9 @@ agents, and uses Git only when the user chooses to share a project.
 > FS User Stories does not manage your team, your dates, or your company. It only
 > makes clear what needs to be built.
 
-## Alpha 8 — Version 0.1.0 (Build 8)
+## Version 1.0.2 (Build 3)
 
-The first team-testing alpha is already a functional product, not a static UI
+FS User Stories is a functional product, not a static UI
 prototype. It includes a signed and notarized Apple Silicon application with the
 following capabilities.
 
@@ -87,7 +87,7 @@ following capabilities.
   feed.
 - Export all, Active, Completed, Draft, or manually selected stories into one
   readable Markdown file; review and import selected stories from the same open
-  format. Attachments are intentionally excluded from this transfer in Alpha 8.
+  format. Attachments are intentionally excluded from this transfer format.
 
 ### Managed attachments
 
@@ -114,7 +114,7 @@ The app runs a loopback-only MCP server while it is open. The MCP screen shows
 the live status, URL, port, and connection instructions; the same status is also
 visible in the app footer and menu bar.
 
-Alpha 8 exposes 27 tools covering the product's real operations:
+Version 1.0.2 exposes 27 tools covering the product's real operations:
 
 - Describe the application and list or inspect projects.
 - Create projects and inspect repository status.
@@ -177,12 +177,12 @@ The end-user macOS edition is distributed through the
 currently source-build targets; their installers and AppImages are deliberately
 not committed to this repository or published as releases yet.
 
-This is still an alpha intended for team testing. Back up important project data
-and [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
+Back up important project data and
+[report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
 
 ## Road to Version 1
 
-The current alpha validates the local-first workflow, Git sharing, and local MCP
+Version 1.0.2 validates the local-first workflow, Git sharing, and local MCP
 across the shared Rust core and the platform interfaces.
 
 **Version 1 is planned as the public product release:**
@@ -407,7 +407,7 @@ cargo test --manifest-path Core/Cargo.toml
 Create an unsigned local application and DMG:
 
 ```sh
-./Scripts/package-alpha.sh
+./Scripts/package-release.sh
 ```
 
 Local data is stored in:
@@ -421,8 +421,8 @@ Do not delete the Application Support directory unless you intentionally want to
 remove every locally stored project and managed attachment.
 
 Signing and notarization are release-owner actions performed separately with
-`Scripts/sign-and-notarize-alpha.sh`. See
-[`docs/releasing-macos-alpha.md`](./docs/releasing-macos-alpha.md) for the release
+`Scripts/sign-and-notarize-release.sh`. See
+[`docs/releasing-macos.md`](./docs/releasing-macos.md) for the release
 checklist.
 
 ## Product principles

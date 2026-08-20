@@ -12,7 +12,7 @@
         systems without VC++ Redist installed).
 
     Produces:
-      * Distribution/Windows/FSUserStoriesSetup-0.1.0-alpha-x64.exe
+      * Distribution/Windows/FSUserStoriesSetup-1.0.2-x64.exe
         (single-file NSIS installer for Windows x64)
 #>
 
@@ -148,7 +148,7 @@ if (-not $makensis) {
     throw "makensis.exe not found; install NSIS before packaging."
 }
 
-$installerPath = Join-Path $outRoot "FSUserStoriesSetup-0.1.0-alpha-x64.exe"
+$installerPath = Join-Path $outRoot "FSUserStoriesSetup-1.0.2-x64.exe"
 if (Test-Path $installerPath) { Remove-Item -Force $installerPath }
 
 $installerScript = Join-Path $projectRoot "Scripts/installer.nsi"

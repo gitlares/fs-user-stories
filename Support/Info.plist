@@ -24,11 +24,11 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>1.0.2</string>
     <key>CFBundleVersion</key>
-    <string>8</string>
+    <string>3</string>
     <key>FSReleaseName</key>
-    <string>Alpha 8</string>
+    <string>1.0.2</string>
     <key>FSDistributionChannel</key>
     <string>Direct Download</string>
     <key>FSGitHubOAuthClientID</key>

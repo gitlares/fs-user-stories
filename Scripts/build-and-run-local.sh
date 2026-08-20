@@ -36,7 +36,7 @@ for argument in "$@"; do
 done
 
 if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
-    echo "FS User Stories Alpha currently builds only on Apple Silicon Macs." >&2
+    echo "FS User Stories currently builds only on Apple Silicon Macs." >&2
     exit 1
 fi
 
@@ -72,7 +72,7 @@ if [ "$run_tests" = true ]; then
 fi
 
 echo "Packaging the local macOS application..."
-"$script_dir/package-alpha.sh"
+"$script_dir/package-release.sh"
 
 if [ "$open_app" = true ]; then
     echo "Opening $app_bundle"
