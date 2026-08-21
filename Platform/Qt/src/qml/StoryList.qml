@@ -117,9 +117,14 @@ Item {
     }
 
     ColumnLayout {
+        // ProjectProfilesView is intentionally raised above the story pane,
+        // so keep this layout's persistent mode picker in the higher stacking
+        // context. The story content itself is hidden while profiles are shown.
+        z: 20
         anchors.fill: parent; spacing: 0
         Item {
             Layout.fillWidth: true; Layout.preferredHeight: 56
+            Layout.alignment: Qt.AlignTop
             Rectangle {
                 width: 200; height: 30; anchors.centerIn: parent; radius: 8; color: theme.control
                 RowLayout {

@@ -12,17 +12,16 @@ under `Platform/Qt/`; the Rust core lives in `Core/`.
 sudo apt update
 sudo apt install -y \
     build-essential cmake ninja-build pkg-config git curl \
-    qt6-base-dev qt6-declarative-dev qt6-tools-dev \
-    qt6-quickcontrols2-dev qml6-module-qtquick \
-    qml6-module-qtquick-controls qml6-module-qtquick-layouts \
-    qml6-module-qtquick-window qml6-module-qtquick-dialogs \
-    qml6-module-qtquick-templates qml6-module-qtqml-workerscript \
-    libssl-dev libgit2-dev librust-libgit2-sys-dev
+    libsecret-1-dev
 ```
 
-The Rust core vendors libgit2/openssl via `git2` features `vendored-libgit2`
-and `vendored-openssl`, so the `libgit2-dev` packages above are optional
-(skip them if you don't want to use the system libgit2).
+Install a Qt 6.5 or newer desktop kit. Qt 6.7.3 `gcc_64` is the tested kit;
+Ubuntu 24.04's Qt 6.4 packages are too old. With the Qt Online Installer's
+default location:
+
+```sh
+export FS_USER_STORIES_QT_ROOT="$HOME/Qt/6.7.3/gcc_64"
+```
 
 ### Rust
 
@@ -48,20 +47,22 @@ sudo chmod +x /usr/local/bin/linuxdeploy*
 ./Scripts/build-core-linux.sh
 ```
 
-The output is written to `Platform/Linux/Qt/core-bundle/fs-user-stories-core`.
+The output is written to `Platform/Qt/core-bundle/fs-user-stories-core`.
 
 ## 3. Build the Qt app
 
 ```sh
-cmake -S Platform/Linux/Qt -B Platform/Linux/Qt/build -G Ninja \
-      -DCMAKE_BUILD_TYPE=Release
-cmake --build Platform/Linux/Qt/build --parallel
+cmake -S Platform/Qt -B Platform/Qt/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_PREFIX_PATH="$FS_USER_STORIES_QT_ROOT"
+cmake --build Platform/Qt/build --parallel
 ```
 
 Run it for a quick smoke test:
 
 ```sh
-./Platform/Linux/Qt/build/fs-user-stories
+FS_USER_STORIES_CORE="$PWD/Platform/Qt/core-bundle/fs-user-stories-core" \
+    ./Platform/Qt/build/fs-user-stories
 ```
 
 ## 4. Build an AppImage
@@ -86,21 +87,10 @@ The AppImage is written to `Distribution/Linux/FSUserStories-x86_64.AppImage`.
 - The data root layout is intentionally XDG-compliant so distributions can
   package the binary as a `.deb` later without collisions.
 
-## 6. Current scope of the Qt GUI
+## 6. Qt GUI scope
 
-The first iteration (this branch) ships:
-
-- Welcome view, project list, project creation flow.
-- Three-pane workspace (project list / story list / story detail).
-- Story creation, edit, and delete.
-- Search, status filter, profile filter.
-- Export / import Markdown.
-- Footer status bar with the running core path.
-
-The following workflows are placeholder views and will be filled in after
-the basic round-trip with the core is stable:
-
-- Project profiles (UI scaffolding present in `ProjectProfilesView.qml`).
-- Git sync UI (`GitSyncView.qml`).
-- GitHub Device Flow, conflict resolution, and MCP server management.
-- Attachments and QuickLook equivalent.
+The Qt application includes project, profile and story CRUD; acceptance
+criteria and notes; portable attachments; automatic Git synchronization;
+GitHub Device Flow and collaborator invitations; and the local MCP server.
+On Linux, clicking an attachment reveals its managed copy in an installed
+file manager.

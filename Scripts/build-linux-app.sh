@@ -2,9 +2,8 @@
 # Builds the FS User Stories Qt front-end and bundles an AppImage.
 #
 # Requirements (Ubuntu/Debian):
-#   apt install build-essential cmake ninja-build pkg-config \
-#               qt6-base-dev qt6-declarative-dev qt6-tools-dev \
-#               qt6-quickcontrols2-6-dev libqt6quick6 libqt6quickcontrols2-6
+#   apt install build-essential cmake ninja-build pkg-config libsecret-1-dev
+#   Install a Qt 6.5+ desktop kit, then set FS_USER_STORIES_QT_ROOT to it.
 #   cargo install --locked cargo-bundle  # optional
 #   wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
 #        -O /usr/local/bin/linuxdeploy
@@ -28,8 +27,15 @@ if ! command -v cmake >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v qmake6 >/dev/null 2>&1 && ! command -v qmake-qt6 >/dev/null 2>&1; then
-    echo "Qt 6 development tools are required (qmake6)" >&2
+QT_ROOT=${FS_USER_STORIES_QT_ROOT:-}
+if [ -n "$QT_ROOT" ]; then
+    if [ ! -f "$QT_ROOT/lib/cmake/Qt6/Qt6Config.cmake" ]; then
+        echo "FS_USER_STORIES_QT_ROOT does not point to a Qt desktop kit: $QT_ROOT" >&2
+        exit 1
+    fi
+elif ! command -v qmake6 >/dev/null 2>&1 && \
+     ! command -v qmake-qt6 >/dev/null 2>&1; then
+    echo "Qt 6.5+ is required. Set FS_USER_STORIES_QT_ROOT to its desktop kit." >&2
     exit 1
 fi
 
@@ -37,7 +43,13 @@ fi
 "$(dirname "$0")/build-core-linux.sh"
 
 # 2. Configure & build the Qt app.
-cmake -S "$QT_PROJECT" -B "$BUILD_DIRECTORY" -G Ninja -DCMAKE_BUILD_TYPE=Release
+if [ -n "$QT_ROOT" ]; then
+    cmake -S "$QT_PROJECT" -B "$BUILD_DIRECTORY" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT"
+else
+    cmake -S "$QT_PROJECT" -B "$BUILD_DIRECTORY" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release
+fi
 cmake --build "$BUILD_DIRECTORY" --parallel
 
 # 3. Build the AppDir layout.

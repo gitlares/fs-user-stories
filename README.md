@@ -295,9 +295,16 @@ Use `./Scripts/build-and-run-local.sh --test` to run the macOS and Rust tests.
 On Ubuntu/Debian, install the build prerequisites once:
 
 ```sh
-sudo apt install build-essential cmake ninja-build pkg-config git \
-  qt6-base-dev qt6-declarative-dev qt6-tools-dev libsecret-1-dev
+sudo apt install build-essential cmake ninja-build pkg-config git libsecret-1-dev
 rustup toolchain install stable
+```
+
+Install a Qt 6.5 or newer desktop kit (Qt 6.7.3 `gcc_64` is the tested kit).
+Ubuntu 24.04's repository contains Qt 6.4, which is too old for this source.
+When Qt is not in CMake's search path, point the build script to the kit:
+
+```sh
+export FS_USER_STORIES_QT_ROOT="$HOME/Qt/6.7.3/gcc_64"
 ```
 
 Then create a local AppImage with one command:

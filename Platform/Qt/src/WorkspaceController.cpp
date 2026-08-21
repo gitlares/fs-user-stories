@@ -534,7 +534,31 @@ bool WorkspaceController::revealAttachment(const QString &relativePath)
         return false;
     }
 #else
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()))) {
+    const QString directoryPath = QFileInfo(path).absolutePath();
+    bool opened = false;
+    const auto launchFileManager = [&opened](const QString &program,
+                                              const QStringList &arguments) {
+        if (opened || QStandardPaths::findExecutable(program).isEmpty()) {
+            return;
+        }
+        opened = QProcess::startDetached(program, arguments);
+    };
+
+    // Prefer an actual file manager before asking the desktop URL handler.
+    // Some minimal Linux installations incorrectly associate directories with
+    // utilities such as Disk Usage Analyzer, which cannot reveal attachments.
+    launchFileManager(QStringLiteral("nautilus"),
+                      {QStringLiteral("--select"), path});
+    launchFileManager(QStringLiteral("dolphin"),
+                      {QStringLiteral("--select"), path});
+    launchFileManager(QStringLiteral("nemo"), {directoryPath});
+    launchFileManager(QStringLiteral("thunar"), {directoryPath});
+    launchFileManager(QStringLiteral("pcmanfm"), {directoryPath});
+
+    if (!opened) {
+        opened = QDesktopServices::openUrl(QUrl::fromLocalFile(directoryPath));
+    }
+    if (!opened) {
         setError(tr("The attachment folder could not be opened."));
         return false;
     }
