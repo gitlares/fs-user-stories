@@ -188,20 +188,30 @@ not committed to this repository or published as releases yet.
 Back up important project data and
 [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
 
-## Road to Version 1
+## Version 1 is available
 
-Version 1.0.8 validates the local-first workflow, Git sharing, and local MCP
-across the shared Rust core and the platform interfaces.
+FS User Stories has passed its original Version 1 milestone. Version 1.0.8 is
+the current code release and includes the complete local-first workflow, Git
+sharing and automatic synchronization, portable attachments, and the local MCP
+server across the shared Rust core and platform interfaces.
 
-**Version 1 is planned as the public product release:**
+### Platform status
 
-- A polished macOS edition distributed through the Mac App Store.
-- Native Linux and Windows editions built from the same open portable core and
-  local project format.
+- **macOS:** the production edition is distributed through the Mac App Store.
+  It provides the complete native experience and is the reference edition.
+- **Windows x64:** the Qt edition compiles in GitHub Actions, produces a single
+  installer, and passes an automated installation smoke test. It is available
+  for source builds and contributor testing, but is not yet considered ready
+  for general distribution.
+- **Linux x64:** the Qt edition shares the same core and project format and can
+  be built from source. Broader distribution testing and packaging validation
+  are still in progress.
 
-The product promise does not change across platforms: local data, no FS User
-Stories accounts, no mandatory cloud, optional Git sharing, and a local MCP
-server for the agent the user chooses.
+The product promise is the same on every platform: local data, no FS User
+Stories account, no mandatory cloud, optional Git sharing, automatic repository
+repair and synchronization, portable attachments, and a local MCP server for
+the agent the user chooses. Windows and Linux contributors are welcome to help
+test complete workflows, improve packaging, and report reproducible issues.
 
 ### Test with two Macs
 
