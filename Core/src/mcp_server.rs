@@ -429,9 +429,58 @@ fn execute_tool(
 }
 
 fn load_projects(config: &MCPServerConfig) -> Result<Vec<WorkspaceProject>, String> {
-    WorkspaceStore::open(&config.database_path)
-        .and_then(|store| store.load_projects())
-        .map_err(|error| error.to_string())
+    let mut store =
+        WorkspaceStore::open(&config.database_path).map_err(|error| error.to_string())?;
+    let mut projects = store.load_projects().map_err(|error| error.to_string())?;
+    if migrate_attachment_paths(&mut projects, &config.attachments_root)? {
+        store
+            .save_projects(&projects)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(projects)
+}
+
+/// Attachment paths are database-relative and must never depend on the
+/// operating system or the machine that imported the project. Migrate legacy
+/// absolute/filename-based paths into the canonical managed layout on read.
+fn migrate_attachment_paths(
+    projects: &mut [WorkspaceProject],
+    attachments_root: &Path,
+) -> Result<bool, String> {
+    let mut changed = false;
+    for project in projects {
+        for story in &mut project.stories {
+            for attachment in &mut story.attachments {
+                let canonical = managed_attachment_path(
+                    &project.id,
+                    &story.id,
+                    &attachment.id,
+                    &attachment.filename,
+                );
+                if attachment.relative_path == canonical {
+                    continue;
+                }
+                let legacy = PathBuf::from(&attachment.relative_path);
+                let source = if legacy.is_absolute() {
+                    legacy
+                } else {
+                    attachments_root.join(&legacy)
+                };
+                let destination = attachments_root.join(&canonical);
+                if source.is_file() && source != destination {
+                    if let Some(parent) = destination.parent() {
+                        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                    }
+                    if !destination.exists() {
+                        fs::copy(&source, &destination).map_err(|error| error.to_string())?;
+                    }
+                }
+                attachment.relative_path = canonical;
+                changed = true;
+            }
+        }
+    }
+    Ok(changed)
 }
 
 fn project(config: &MCPServerConfig, id: &str) -> Result<WorkspaceProject, String> {

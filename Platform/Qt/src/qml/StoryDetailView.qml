@@ -281,7 +281,10 @@ Item {
                             if (drop.hasUrls) workspace.importAttachments(storyId, drop.urls)
                         }
                     }
-                    MouseArea { anchors.fill: parent; enabled: !root.readOnly; onClicked: attachmentDialog.open() }
+                    TapHandler {
+                        enabled: !root.readOnly
+                        onTapped: attachmentDialog.open()
+                    }
                 }
                 Repeater {
                     model: storyAttachments
