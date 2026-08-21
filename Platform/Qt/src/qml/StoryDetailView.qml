@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 import QtQuick
 import QtQuick.Controls
-import Qt.labs.platform as Platform
 import QtQuick.Layouts
 
 Item {
@@ -261,7 +260,7 @@ Item {
                 Layout.fillWidth: true; spacing: 12
                 RowLayout {
                     Label { text: qsTr("Attachments"); font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                    MacIconButton { iconName: "attach_file"; enabled: !root.readOnly; onClicked: attachmentDialog.open() }
+                    MacIconButton { iconName: "attach_file"; enabled: !root.readOnly; onClicked: workspace.chooseAttachments(storyId) }
                 }
                 Rectangle {
                     Layout.fillWidth: true
@@ -294,7 +293,7 @@ Item {
                     }
                     TapHandler {
                         enabled: !root.readOnly
-                        onTapped: attachmentDialog.open()
+                        onTapped: workspace.chooseAttachments(storyId)
                     }
                 }
                 Repeater {
@@ -309,7 +308,7 @@ Item {
                             MacIconButton { iconName: "delete"; enabled: !root.readOnly; onClicked: workspace.removeAttachment(storyId, modelData.id) }
                         }
                         background: Rectangle { radius: theme.smallRadius; color: parent.hovered ? theme.control : "transparent" }
-                        onClicked: workspace.openAttachment(modelData.relativePath)
+                        onClicked: workspace.openAttachment(storyId, modelData.id)
                     }
                 }
             }
@@ -342,13 +341,6 @@ Item {
             MacButton { text: qsTr("Cancel"); onClicked: deleteStoryDialog.close() }
         }
     }
-    Platform.FileDialog {
-        id: attachmentDialog
-        title: qsTr("Add Attachments")
-        fileMode: Platform.FileDialog.OpenFiles
-        onAccepted: workspace.importAttachments(storyId, files)
-    }
-
     function countMetCriteria() {
         var count = 0
         for (var i = 0; i < storyCriteria.length; i++) if (storyCriteria[i].isMet) count++

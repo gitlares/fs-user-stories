@@ -488,7 +488,7 @@ pub(crate) fn migrate_attachment_paths(
                     }
                     fs::copy(source, &destination).map_err(|error| error.to_string())?;
                 }
-                if attachment.relative_path != canonical {
+                if destination.is_file() && attachment.relative_path != canonical {
                     attachment.relative_path = canonical;
                     changed = true;
                 }
@@ -1784,12 +1784,43 @@ mod tests {
         );
         assert!(!attachment.sha256.is_empty());
 
+        let attachment_id = attachment.id.clone();
+        let canonical_relative_path = attachment.relative_path.clone();
+        let canonical_path = config.attachments_root.join(&canonical_relative_path);
+        let legacy_path = directory.path().join("legacy attachment.png");
+        fs::rename(&canonical_path, &legacy_path).expect("move to legacy path");
+        let mut legacy_project = imported.clone();
+        legacy_project.stories[0].attachments[0].relative_path =
+            legacy_path.to_string_lossy().into_owned();
+        save_updated_project(&config, legacy_project).expect("save legacy path");
+
+        let restored = load_projects(&config).expect("restore legacy attachment");
+        assert_eq!(
+            restored[0].stories[0].attachments[0].relative_path,
+            canonical_relative_path
+        );
+        assert!(canonical_path.is_file());
+
+        fs::remove_file(&canonical_path).expect("remove managed attachment");
+        let missing_legacy_path = directory.path().join("missing legacy attachment.png");
+        let mut missing_project = restored[0].clone();
+        missing_project.stories[0].attachments[0].relative_path =
+            missing_legacy_path.to_string_lossy().into_owned();
+        save_updated_project(&config, missing_project).expect("save missing legacy path");
+
+        let unresolved = load_projects(&config).expect("load missing legacy attachment");
+        assert_eq!(
+            unresolved[0].stories[0].attachments[0].relative_path,
+            missing_legacy_path.to_string_lossy()
+        );
+        assert!(!canonical_path.exists());
+
         remove_stored_attachment(
             config.database_path.clone(),
             config.attachments_root.clone(),
             project.id,
             story_id,
-            attachment.id.clone(),
+            attachment_id,
         )
         .expect("remove attachment");
         let stored = load_projects(&config).expect("load projects");

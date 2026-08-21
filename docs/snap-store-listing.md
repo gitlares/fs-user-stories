@@ -1,4 +1,4 @@
-# Snap Store listing — FS User Stories 1.0.4
+# Snap Store listing — FS User Stories 1.0.5
 
 This is the copy and screenshot checklist for the Snap Store listing. The
 images below are real application captures, not mock-ups or generated artwork.
@@ -17,7 +17,7 @@ The Linux app uses the same Rust core as the macOS app and a Qt/QML interface
 that stays useful offline. Git synchronization is explicit and conflict-aware:
 the app reports a remote change instead of silently overwriting work.
 
-This snap is the x86_64 Linux build of FS User Stories 1.0.4. It is free to
+This snap is the x86_64 Linux build of FS User Stories 1.0.5. It is free to
 use. If FS User Stories saves your team time, you can help cover development
 and infrastructure costs with a voluntary donation:
 

@@ -7,7 +7,7 @@ Unicode True
 SetCompressor /SOLID lzma
 
 !define APPNAME      "FS User Stories"
-!define APPVERSION   "1.0.4"
+!define APPVERSION   "1.0.5"
 !define PUBLISHER    "Pulser"
 !define DESCRIPTION  "Local, offline-first user stories."
 !define INSTALLDIR   "$LOCALAPPDATA\Programs\FS User Stories"
@@ -40,6 +40,12 @@ RequestExecutionLevel user
 
 Section "Install"
   SectionIn RO
+  ; The application normally remains in the tray when its window closes.
+  ; Stop an older build before replacing it, then clear only the application
+  ; directory. User projects and attachments live under LocalAppData outside
+  ; this directory and are preserved.
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM "fs-user-stories.exe" /T /F'
+  RMDir /r "$INSTDIR"
   SetOutPath "$INSTDIR"
   ; /r recurses subdirectories; xp preserves long paths
   File /r "${PACKAGE_DIR}\fs-user-stories\*.*"

@@ -100,9 +100,11 @@ public:
                                                const QString &criterionId);
     Q_INVOKABLE void importAttachments(const QString &storyId,
                                        const QVariantList &sourceFiles);
+    Q_INVOKABLE void chooseAttachments(const QString &storyId);
     Q_INVOKABLE void removeAttachment(const QString &storyId,
                                       const QString &attachmentId);
-    Q_INVOKABLE void openAttachment(const QString &relativePath);
+    Q_INVOKABLE void openAttachment(const QString &storyId,
+                                    const QString &attachmentId);
     Q_INVOKABLE void deleteStory(const QString &storyId);
 
     Q_INVOKABLE void synchronize();
@@ -151,6 +153,9 @@ private:
     void scheduleAutomaticSynchronization();
     void runAutomaticSynchronization();
     void synchronizeCurrentProject(bool announceCompletion);
+    QString attachmentRelativePath(const QString &storyId,
+                                   const QString &attachmentId) const;
+    bool revealAttachment(const QString &relativePath);
     bool joinInvitationRemote(const QString &remoteUrl,
                               const QString &accessToken = QString());
     bool createPrivateGitHubRepositoryWithToken(const QString &accessToken);

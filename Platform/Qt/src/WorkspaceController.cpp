@@ -6,6 +6,7 @@
 #include "StoryModel.h"
 
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QDir>
 #include <QDesktopServices>
@@ -15,6 +16,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QUrl>
 #include <utility>
 
@@ -423,6 +425,27 @@ void WorkspaceController::importAttachments(const QString &storyId,
     scheduleAutomaticSynchronization();
 }
 
+void WorkspaceController::chooseAttachments(const QString &storyId)
+{
+    if (storyId.isEmpty()) {
+        return;
+    }
+    const QStringList files = QFileDialog::getOpenFileNames(
+        nullptr,
+        tr("Add Attachments"),
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+        tr("All Files (*)"));
+    if (files.isEmpty()) {
+        return;
+    }
+    QVariantList urls;
+    urls.reserve(files.size());
+    for (const QString &file : files) {
+        urls.append(QUrl::fromLocalFile(file));
+    }
+    importAttachments(storyId, urls);
+}
+
 void WorkspaceController::removeAttachment(const QString &storyId,
                                            const QString &attachmentId)
 {
@@ -449,29 +472,76 @@ void WorkspaceController::removeAttachment(const QString &storyId,
     scheduleAutomaticSynchronization();
 }
 
-void WorkspaceController::openAttachment(const QString &relativePath)
+QString WorkspaceController::attachmentRelativePath(const QString &storyId,
+                                                    const QString &attachmentId) const
+{
+    for (const QVariant &storyValue : m_currentProject.value("stories").toList()) {
+        const QVariantMap story = storyValue.toMap();
+        if (story.value("id").toString() != storyId) {
+            continue;
+        }
+        for (const QVariant &attachmentValue : story.value("attachments").toList()) {
+            const QVariantMap attachment = attachmentValue.toMap();
+            if (attachment.value("id").toString() == attachmentId) {
+                return attachment.value("relativePath").toString();
+            }
+        }
+    }
+    return {};
+}
+
+bool WorkspaceController::revealAttachment(const QString &relativePath)
 {
     const QString root = QDir(m_attachmentsRoot).canonicalPath();
     const QString path = QFileInfo(QDir(m_attachmentsRoot).filePath(relativePath)).canonicalFilePath();
     if (path.isEmpty() || root.isEmpty() ||
         !(path == root || path.startsWith(root + QDir::separator()))) {
-        setError(tr("The attachment path is invalid or the file no longer exists."));
-        return;
+        return false;
     }
 #ifdef Q_OS_WIN
     if (!QProcess::startDetached(QStringLiteral("explorer.exe"),
                                  {QStringLiteral("/select,"), QDir::toNativeSeparators(path)})) {
         setError(tr("The attachment could not be shown in File Explorer."));
+        return false;
     }
 #elif defined(Q_OS_MACOS)
     if (!QProcess::startDetached(QStringLiteral("open"), {QStringLiteral("-R"), path})) {
         setError(tr("The attachment could not be shown in Finder."));
+        return false;
     }
 #else
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()))) {
         setError(tr("The attachment folder could not be opened."));
+        return false;
     }
 #endif
+    return true;
+}
+
+void WorkspaceController::openAttachment(const QString &storyId,
+                                         const QString &attachmentId)
+{
+    setError({});
+    QString relativePath = attachmentRelativePath(storyId, attachmentId);
+    if (!relativePath.isEmpty() && revealAttachment(relativePath)) {
+        return;
+    }
+
+    if (currentProjectHasRemote()) {
+        synchronizeCurrentProject(false);
+        if (!m_lastError.isEmpty()) {
+            return;
+        }
+    }
+    load();
+    if (!m_lastError.isEmpty()) {
+        return;
+    }
+    relativePath = attachmentRelativePath(storyId, attachmentId);
+    if (!relativePath.isEmpty() && revealAttachment(relativePath)) {
+        return;
+    }
+    setError(tr("The attachment could not be restored from the shared repository."));
 }
 
 void WorkspaceController::deleteStory(const QString &storyId)
@@ -540,6 +610,10 @@ void WorkspaceController::synchronizeCurrentProject(bool announceCompletion)
     if (!m_pendingSyncConflicts.isEmpty()) {
         m_pendingSyncConflicts.clear();
         emit pendingSyncConflictsChanged();
+    }
+    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+    if (!project.isEmpty()) {
+        applyProject(project);
     }
     if (announceCompletion) {
         emit info(tr("Project synchronized."));
