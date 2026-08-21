@@ -443,7 +443,7 @@ fn load_projects(config: &MCPServerConfig) -> Result<Vec<WorkspaceProject>, Stri
 /// Attachment paths are database-relative and must never depend on the
 /// operating system or the machine that imported the project. Migrate legacy
 /// absolute/filename-based paths into the canonical managed layout on read.
-fn migrate_attachment_paths(
+pub(crate) fn migrate_attachment_paths(
     projects: &mut [WorkspaceProject],
     attachments_root: &Path,
 ) -> Result<bool, String> {

@@ -84,6 +84,7 @@ void WorkspaceController::load()
     const QVariantMap reply = runCommand({
         {"command", "load_workspace"},
         {"database_path", m_databasePath},
+        {"attachments_root", m_attachmentsRoot},
     });
     setBusy(false);
 

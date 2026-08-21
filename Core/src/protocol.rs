@@ -108,6 +108,8 @@ pub enum Command {
     },
     LoadWorkspace {
         database_path: PathBuf,
+        #[serde(default)]
+        attachments_root: Option<PathBuf>,
     },
     SearchWorkspace {
         database_path: PathBuf,
@@ -355,9 +357,21 @@ pub fn execute(command: Command) -> Result<Response, CoreError> {
         Command::ApplyWorkspaceCommand { project, operation } => {
             Response::success(apply_workspace_command(project, operation)?)
         }
-        Command::LoadWorkspace { database_path } => Response::success(
-            json!({"projects": WorkspaceStore::open(&database_path)?.load_projects()?}),
-        ),
+        Command::LoadWorkspace {
+            database_path,
+            attachments_root,
+        } => {
+            let mut store = WorkspaceStore::open(&database_path)?;
+            let mut projects = store.load_projects()?;
+            if let Some(attachments_root) = attachments_root {
+                if crate::mcp_server::migrate_attachment_paths(&mut projects, &attachments_root)
+                    .map_err(CoreError::StoredWorkspaceOperation)?
+                {
+                    store.save_projects(&projects)?;
+                }
+            }
+            Response::success(json!({"projects": projects}))
+        }
         Command::SearchWorkspace {
             database_path,
             query,
