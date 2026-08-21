@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QProcess>
 #include <QUrl>
 #include <utility>
 
@@ -457,9 +458,20 @@ void WorkspaceController::openAttachment(const QString &relativePath)
         setError(tr("The attachment path is invalid or the file no longer exists."));
         return;
     }
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path))) {
-        setError(tr("The attachment could not be opened."));
+#ifdef Q_OS_WIN
+    if (!QProcess::startDetached(QStringLiteral("explorer.exe"),
+                                 {QStringLiteral("/select,"), QDir::toNativeSeparators(path)})) {
+        setError(tr("The attachment could not be shown in File Explorer."));
     }
+#elif defined(Q_OS_MACOS)
+    if (!QProcess::startDetached(QStringLiteral("open"), {QStringLiteral("-R"), path})) {
+        setError(tr("The attachment could not be shown in Finder."));
+    }
+#else
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()))) {
+        setError(tr("The attachment folder could not be opened."));
+    }
+#endif
 }
 
 void WorkspaceController::deleteStory(const QString &storyId)
