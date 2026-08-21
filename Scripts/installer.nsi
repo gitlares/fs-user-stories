@@ -7,7 +7,7 @@ Unicode True
 SetCompressor /SOLID lzma
 
 !define APPNAME      "FS User Stories"
-!define APPVERSION   "1.0.5"
+!define APPVERSION   "1.0.6"
 !define PUBLISHER    "Pulser"
 !define DESCRIPTION  "Local, offline-first user stories."
 !define INSTALLDIR   "$LOCALAPPDATA\Programs\FS User Stories"

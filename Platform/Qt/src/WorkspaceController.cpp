@@ -402,8 +402,22 @@ void WorkspaceController::importAttachments(const QString &storyId,
     }
     QVariantList sourcePaths;
     for (const QVariant &sourceFile : sourceFiles) {
-        const QUrl url = sourceFile.toUrl();
-        sourcePaths.append(url.isLocalFile() ? url.toLocalFile() : sourceFile.toString());
+        const QString rawValue = sourceFile.toString();
+        const QUrl url = QUrl::fromEncoded(rawValue.toUtf8());
+        QString path = url.isLocalFile() ? url.toLocalFile() : rawValue;
+#ifdef Q_OS_WIN
+        if (path.size() > 2 && path.at(0) == u'/' && path.at(2) == u':') {
+            path.remove(0, 1);
+        }
+#endif
+        path = QDir::toNativeSeparators(path);
+        if (!path.isEmpty()) {
+            sourcePaths.append(path);
+        }
+    }
+    if (sourcePaths.isEmpty()) {
+        setError(tr("The dropped files did not contain a usable local path."));
+        return;
     }
     setError({});
     setBusy(true);

@@ -137,6 +137,28 @@ impl ProjectSnapshot {
         Ok(snapshot)
     }
 
+    pub fn read_legacy_with_identity(
+        repository: &Path,
+        identity: &ProjectSnapshot,
+    ) -> Result<Self, CoreError> {
+        let root = repository.join(ARCHIVE_DIRECTORY);
+        if !root.join("README.md").is_file()
+            || (!root.join("profiles").is_dir() && !root.join("stories").is_dir())
+        {
+            return Err(CoreError::ArchiveNotFound);
+        }
+        let snapshot = Self {
+            format_version: Self::FORMAT_VERSION,
+            project_id: identity.project_id.clone(),
+            name: identity.name.clone(),
+            prefix: identity.prefix.clone(),
+            actors: read_entities(&root.join("profiles"))?,
+            stories: read_entities(&root.join("stories"))?,
+        };
+        snapshot.validate()?;
+        Ok(snapshot)
+    }
+
     fn readme(&self) -> String {
         format!(
             "# {}\n\nFS User Stories project archive.\n\n- Prefix: `{}`\n- Profiles: {}\n- Stories: {}\n\nThe JSON files are the synchronized source of truth.\n",
@@ -307,5 +329,31 @@ mod tests {
         let root = directory.path().join(ARCHIVE_DIRECTORY);
         assert!(!root.join(legacy_path).exists());
         assert!(root.join(canonical_path).exists());
+    }
+
+    #[test]
+    fn legacy_archive_without_project_header_uses_known_project_identity() {
+        let directory = tempdir().unwrap();
+        let identity = ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![],
+            stories: vec![],
+        };
+        identity.write(directory.path()).unwrap();
+        fs::remove_file(
+            directory
+                .path()
+                .join(ARCHIVE_DIRECTORY)
+                .join("project.json"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            ProjectSnapshot::read_legacy_with_identity(directory.path(), &identity).unwrap(),
+            identity
+        );
     }
 }

@@ -286,9 +286,15 @@ Item {
                         anchors.fill: parent
                         z: 10
                         enabled: !root.readOnly
+                        onEntered: (drag) => drag.acceptProposedAction()
                         onDropped: (drop) => {
-                            if (drop.hasUrls && drop.urls.length > 0)
-                                workspace.importAttachments(storyId, drop.urls)
+                            if (drop.hasUrls && drop.urls.length > 0) {
+                                const paths = []
+                                for (let index = 0; index < drop.urls.length; ++index)
+                                    paths.push(drop.urls[index].toString())
+                                workspace.importAttachments(storyId, paths)
+                                drop.acceptProposedAction()
+                            }
                         }
                     }
                     TapHandler {

@@ -99,7 +99,12 @@ impl RepositoryEngine {
     ) -> Result<SyncOutcome, CoreError> {
         let repository = Repository::open(&self.root)?;
         ensure_sync_branch(&repository)?;
-        let base = ProjectSnapshot::read(&self.root)?;
+        let base = ProjectSnapshot::read(&self.root).or_else(|error| match error {
+            CoreError::ArchiveNotFound => {
+                ProjectSnapshot::read_legacy_with_identity(&self.root, snapshot)
+            }
+            error => Err(error),
+        })?;
         let remote_branch_exists = fetch(&repository, access_token)?;
         let received_shared_changes =
             remote_branch_exists && fast_forward_if_possible(&repository)?;
@@ -107,7 +112,12 @@ impl RepositoryEngine {
         // separately from `base`: it is needed to recover when two clients
         // fetch the same remote tip and try to publish at the same time.
         let publication_base = if received_shared_changes {
-            let shared = ProjectSnapshot::read(&self.root)?;
+            let shared = ProjectSnapshot::read(&self.root).or_else(|error| match error {
+                CoreError::ArchiveNotFound => {
+                    ProjectSnapshot::read_legacy_with_identity(&self.root, snapshot)
+                }
+                error => Err(error),
+            })?;
             let result = merge_snapshots(&base, snapshot, &shared)?;
             if !result.conflicts.is_empty() {
                 fs::write(pending_sync_path(&repository), serde_json::to_vec(&result)?)?;
@@ -240,7 +250,7 @@ fn ensure_sync_branch(repository: &Repository) -> Result<(), CoreError> {
 
 fn commit_archive(repository: &Repository, message: &str) -> Result<(), CoreError> {
     let mut index = repository.index()?;
-    index.add_all([".fs-user-stories"], IndexAddOption::DEFAULT, None)?;
+    index.add_all([".fs-user-stories/*"], IndexAddOption::FORCE, None)?;
     index.write()?;
     let tree_id = index.write_tree()?;
     let tree = repository.find_tree(tree_id)?;
@@ -389,6 +399,9 @@ fn remote_callbacks<'a>(access_token: Option<&'a str>) -> RemoteCallbacks<'a> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -397,5 +410,68 @@ mod tests {
         assert!(guard_sync_branch("main").is_err());
         assert!(guard_sync_branch("master").is_err());
         assert!(guard_sync_branch("feature/login").is_err());
+    }
+
+    #[test]
+    fn archive_commit_includes_the_project_header() {
+        let directory = tempdir().unwrap();
+        let snapshot = ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![json!({"id": "actor"})],
+            stories: vec![json!({"id": "story"})],
+        };
+        RepositoryEngine::new(directory.path())
+            .create(&snapshot, &AttachmentSources::new())
+            .unwrap();
+        let repository = Repository::open(directory.path()).unwrap();
+        let tree = repository.head().unwrap().peel_to_tree().unwrap();
+        assert!(
+            tree.get_path(Path::new(".fs-user-stories/project.json"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn synchronization_repairs_a_legacy_repository_without_a_header() {
+        let directory = tempdir().unwrap();
+        let working = directory.path().join("working");
+        let remote_path = directory.path().join("remote.git");
+        Repository::init_bare(&remote_path).unwrap();
+        let snapshot = ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![json!({"id": "actor"})],
+            stories: vec![json!({"id": "story"})],
+        };
+        let engine = RepositoryEngine::new(&working);
+        engine.create(&snapshot, &AttachmentSources::new()).unwrap();
+        let repository = Repository::open(&working).unwrap();
+        fs::remove_file(working.join(".fs-user-stories/project.json")).unwrap();
+        let mut index = repository.index().unwrap();
+        index
+            .remove_path(Path::new(".fs-user-stories/project.json"))
+            .unwrap();
+        index.write().unwrap();
+        commit_archive(&repository, "Simulate legacy archive").unwrap();
+        repository
+            .remote(DEFAULT_REMOTE, remote_path.to_str().unwrap())
+            .unwrap();
+        push(&repository, None).unwrap();
+
+        engine
+            .synchronize(&snapshot, &AttachmentSources::new(), None)
+            .unwrap();
+
+        assert_eq!(ProjectSnapshot::read(&working).unwrap(), snapshot);
+        let tree = repository.head().unwrap().peel_to_tree().unwrap();
+        assert!(
+            tree.get_path(Path::new(".fs-user-stories/project.json"))
+                .is_ok()
+        );
     }
 }
