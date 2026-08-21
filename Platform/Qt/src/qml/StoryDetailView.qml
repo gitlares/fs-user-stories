@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
+import Qt.labs.platform as Platform
 import QtQuick.Layouts
 
 Item {
@@ -331,9 +331,11 @@ Item {
             MacButton { text: qsTr("Cancel"); onClicked: deleteStoryDialog.close() }
         }
     }
-    FileDialog {
-        id: attachmentDialog; title: qsTr("Add Attachments"); fileMode: FileDialog.OpenFiles
-        onAccepted: workspace.importAttachments(storyId, selectedFiles)
+    Platform.FileDialog {
+        id: attachmentDialog
+        title: qsTr("Add Attachments")
+        fileMode: Platform.FileDialog.OpenFiles
+        onAccepted: workspace.importAttachments(storyId, files)
     }
 
     function countMetCriteria() {
