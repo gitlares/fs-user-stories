@@ -177,6 +177,14 @@ The end-user macOS edition is distributed through the
 currently source-build targets; their installers and AppImages are deliberately
 not committed to this repository or published as releases yet.
 
+> **Windows and Linux need contributors.** Their shared Qt application builds
+> from the same Rust core and Windows is continuously compiled and smoke-tested,
+> but we do not yet consider either edition ready for general users. We welcome
+> help compiling them on more machines, testing complete workflows, reporting
+> reproducible problems, and contributing fixes. Start with the one-command
+> build instructions below and share results through
+> [GitHub Issues](https://github.com/gitlares/fs-user-stories/issues).
+
 Back up important project data and
 [report unexpected behavior](https://github.com/gitlares/fs-user-stories/issues).
 
