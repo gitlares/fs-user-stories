@@ -449,6 +449,10 @@ fn migrate_attachment_paths(
 ) -> Result<bool, String> {
     let mut changed = false;
     for project in projects {
+        let archive_root = project
+            .git_repository
+            .as_ref()
+            .map(|link| PathBuf::from(&link.local_path).join(".fs-user-stories"));
         for story in &mut project.stories {
             for attachment in &mut story.attachments {
                 let canonical = managed_attachment_path(
@@ -457,26 +461,37 @@ fn migrate_attachment_paths(
                     &attachment.id,
                     &attachment.filename,
                 );
-                if attachment.relative_path == canonical {
-                    continue;
-                }
+                let destination = attachments_root.join(&canonical);
                 let legacy = PathBuf::from(&attachment.relative_path);
-                let source = if legacy.is_absolute() {
+                let legacy_source = if legacy.is_absolute() {
                     legacy
                 } else {
                     attachments_root.join(&legacy)
                 };
-                let destination = attachments_root.join(&canonical);
-                if source.is_file() && source != destination {
+                let archive_source = archive_root.as_ref().map(|root| {
+                    root.join(archive_attachment_path(
+                        &story.id,
+                        &attachment.id,
+                        &attachment.filename,
+                    ))
+                });
+                let source = if destination.is_file() {
+                    None
+                } else if legacy_source.is_file() {
+                    Some(legacy_source)
+                } else {
+                    archive_source.filter(|path| path.is_file())
+                };
+                if let Some(source) = source {
                     if let Some(parent) = destination.parent() {
                         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
                     }
-                    if !destination.exists() {
-                        fs::copy(&source, &destination).map_err(|error| error.to_string())?;
-                    }
+                    fs::copy(source, &destination).map_err(|error| error.to_string())?;
                 }
-                attachment.relative_path = canonical;
-                changed = true;
+                if attachment.relative_path != canonical {
+                    attachment.relative_path = canonical;
+                    changed = true;
+                }
             }
         }
     }
