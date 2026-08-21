@@ -4,6 +4,8 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Component, Path},
+    thread,
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -74,7 +76,7 @@ impl ProjectSnapshot {
         let root = repository.join(ARCHIVE_DIRECTORY);
         let temporary = repository.join(format!("{ARCHIVE_DIRECTORY}.tmp"));
         if temporary.exists() {
-            fs::remove_dir_all(&temporary)?;
+            remove_dir_all_with_retry(&temporary)?;
         }
         fs::create_dir_all(temporary.join("profiles"))?;
         fs::create_dir_all(temporary.join("stories"))?;
@@ -116,7 +118,7 @@ impl ProjectSnapshot {
         }
 
         if root.exists() {
-            fs::remove_dir_all(&root)?;
+            remove_dir_all_with_retry(&root)?;
         }
         fs::rename(temporary, root)?;
         self.digest()
@@ -188,6 +190,20 @@ impl ProjectSnapshot {
         }
         Ok(paths)
     }
+}
+
+fn remove_dir_all_with_retry(path: &Path) -> Result<(), CoreError> {
+    const RETRY_DELAYS_MS: [u64; 4] = [10, 25, 50, 100];
+
+    for delay_ms in RETRY_DELAYS_MS {
+        match fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => thread::sleep(Duration::from_millis(delay_ms)),
+        }
+    }
+
+    fs::remove_dir_all(path).map_err(CoreError::from)
 }
 
 fn safe_relative_path(value: &str) -> Result<&Path, CoreError> {
@@ -329,6 +345,33 @@ mod tests {
         let root = directory.path().join(ARCHIVE_DIRECTORY);
         assert!(!root.join(legacy_path).exists());
         assert!(root.join(canonical_path).exists());
+    }
+
+    #[test]
+    fn archive_recovers_from_a_nonempty_temporary_directory() {
+        let directory = tempdir().unwrap();
+        let temporary = directory.path().join(format!("{ARCHIVE_DIRECTORY}.tmp"));
+        fs::create_dir_all(temporary.join("attachments/stale")).unwrap();
+        fs::write(temporary.join("attachments/stale/file.bin"), b"stale").unwrap();
+        let snapshot = ProjectSnapshot {
+            format_version: 1,
+            project_id: "project".into(),
+            name: "Example".into(),
+            prefix: "EX".into(),
+            actors: vec![],
+            stories: vec![],
+        };
+
+        snapshot.write(directory.path()).unwrap();
+
+        assert!(!temporary.exists());
+        assert!(
+            directory
+                .path()
+                .join(ARCHIVE_DIRECTORY)
+                .join("project.json")
+                .is_file()
+        );
     }
 
     #[test]

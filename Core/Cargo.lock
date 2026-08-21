@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "fs-user-stories-core"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "base64 0.22.1",
  "chrono",

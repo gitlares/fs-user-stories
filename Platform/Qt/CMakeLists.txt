@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(FSUserStoriesQt
-    VERSION 1.0.7
+    VERSION 1.0.8
     DESCRIPTION "FS User Stories — Linux/Qt front-end"
     LANGUAGES CXX
 )

@@ -506,10 +506,19 @@ QString WorkspaceController::attachmentRelativePath(const QString &storyId,
 
 bool WorkspaceController::revealAttachment(const QString &relativePath)
 {
-    const QString root = QDir(m_attachmentsRoot).canonicalPath();
-    const QString path = QFileInfo(QDir(m_attachmentsRoot).filePath(relativePath)).canonicalFilePath();
-    if (path.isEmpty() || root.isEmpty() ||
-        !(path == root || path.startsWith(root + QDir::separator()))) {
+    const QString root = QDir::cleanPath(
+        QDir::fromNativeSeparators(QDir(m_attachmentsRoot).canonicalPath()));
+    const QString path = QDir::cleanPath(QDir::fromNativeSeparators(
+        QFileInfo(QDir(m_attachmentsRoot).filePath(relativePath)).canonicalFilePath()));
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseSensitive;
+#endif
+    const bool isRoot = path.compare(root, pathCaseSensitivity) == 0;
+    const bool isInsideRoot =
+        path.startsWith(root + QLatin1Char('/'), pathCaseSensitivity);
+    if (path.isEmpty() || root.isEmpty() || (!isRoot && !isInsideRoot)) {
         return false;
     }
 #ifdef Q_OS_WIN
