@@ -42,7 +42,10 @@ final class PersistenceStore {
     }
 
     func loadProjects() throws -> [FSProject] {
-        try RustWorkspaceDatabaseClient().loadProjects(databaseURL: databaseURL)
+        try RustWorkspaceDatabaseClient().loadProjects(
+            databaseURL: databaseURL,
+            attachmentsRootURL: Self.defaultAttachmentsRootURL()
+        )
     }
 
     func searchStories(matching query: StoryQuery) throws -> [RustWorkspaceStoryMatch] {
@@ -138,5 +141,19 @@ final class PersistenceStore {
         return applicationSupport
             .appending(path: "FS User Stories", directoryHint: .isDirectory)
             .appending(path: "FSUserStories.sqlite3", directoryHint: .notDirectory)
+    }
+
+    private static func defaultAttachmentsRootURL() throws -> URL {
+        let applicationSupport = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let root = applicationSupport
+            .appending(path: "FS User Stories", directoryHint: .isDirectory)
+            .appending(path: "Attachments", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
     }
 }

@@ -74,11 +74,15 @@ struct RustWorkspaceDatabaseClient: Sendable {
         return try decode(project, as: FSProject.self)
     }
 
-    func loadProjects(databaseURL: URL) throws -> [FSProject] {
-        let result = try RustCoreClient().execute([
+    func loadProjects(databaseURL: URL, attachmentsRootURL: URL? = nil) throws -> [FSProject] {
+        var command: [String: Any] = [
             "command": "load_workspace",
             "database_path": databaseURL.path
-        ])
+        ]
+        if let attachmentsRootURL {
+            command["attachments_root"] = attachmentsRootURL.path
+        }
+        let result = try RustCoreClient().execute(command)
         guard let projects = result["projects"] else {
             throw RustCoreError.invalidResponse
         }
