@@ -264,21 +264,32 @@ Item {
                     MacIconButton { iconName: "attach_file"; enabled: !root.readOnly; onClicked: attachmentDialog.open() }
                 }
                 Rectangle {
-                    visible: storyAttachments.length === 0
-                    Layout.fillWidth: true; Layout.preferredHeight: 138
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: storyAttachments.length === 0 ? 138 : 72
                     radius: theme.mediumRadius; color: Qt.rgba(0, 0, 0, 0.018)
                     border.width: 1; border.color: theme.separator
                     ColumnLayout {
                         anchors.centerIn: parent; spacing: 7
                         IconLabel { text: "attach_file"; font.pixelSize: 34; color: theme.accent; Layout.alignment: Qt.AlignHCenter }
-                        Label { text: qsTr("Drop files here or choose files"); font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
-                        Label { text: qsTr("Images, documents, and other project files"); color: theme.secondaryText; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter }
+                        Label {
+                            text: storyAttachments.length === 0
+                                  ? qsTr("Drop files here or choose files")
+                                  : qsTr("Drop more files or choose files")
+                            font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter
+                        }
+                        Label {
+                            visible: storyAttachments.length === 0
+                            text: qsTr("Images, documents, and other project files")
+                            color: theme.secondaryText; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter
+                        }
                     }
                     DropArea {
                         anchors.fill: parent
+                        z: 10
                         enabled: !root.readOnly
                         onDropped: (drop) => {
-                            if (drop.hasUrls) workspace.importAttachments(storyId, drop.urls)
+                            if (drop.hasUrls && drop.urls.length > 0)
+                                workspace.importAttachments(storyId, drop.urls)
                         }
                     }
                     TapHandler {
