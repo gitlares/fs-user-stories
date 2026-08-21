@@ -9,6 +9,8 @@
 #include <QVariantMap>
 #include <QUrl>
 
+#include <functional>
+
 namespace fsuserstories {
 
 class CoreClient;
@@ -152,7 +154,8 @@ private:
     bool currentProjectHasRemote() const;
     void scheduleAutomaticSynchronization();
     void runAutomaticSynchronization();
-    void synchronizeCurrentProject(bool announceCompletion);
+    void synchronizeCurrentProject(bool announceCompletion,
+                                   std::function<void(bool)> completion = {});
     QString attachmentRelativePath(const QString &storyId,
                                    const QString &attachmentId) const;
     bool revealAttachment(const QString &relativePath);

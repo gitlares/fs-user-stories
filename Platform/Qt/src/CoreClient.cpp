@@ -6,8 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QTimer>
 #include <QLoggingCategory>
+#include <QTimer>
 
 Q_LOGGING_CATEGORY(lcCoreClient, "fsuserstories.coreclient")
 
@@ -200,25 +200,78 @@ QVariantMap CoreClient::execute(const QVariantMap &command)
 }
 
 void CoreClient::executeAsync(const QVariantMap &command,
-                              std::function<void(QVariantMap)> onSuccess,
+                              std::function<void(QVariantMap)> onCompleted,
                               std::function<void(QString)> onError)
 {
-    QTimer::singleShot(0, this, [this, command, onSuccess, onError]() {
-        const QVariantMap reply = execute(command);
-        if (reply.value("ok").toBool()) {
-            if (onSuccess) {
-                onSuccess(reply);
-            }
-        } else {
-            const QVariantMap errorValue = reply.value("error").toMap();
-            const QString message = errorValue.value("message").toString().isEmpty()
-                ? errorValue.value("code").toString()
-                : errorValue.value("message").toString();
-            if (onError) {
-                onError(message);
-            }
-        }
+    // Always use a dedicated one-shot process here. The persistent bridge is
+    // intentionally synchronous, while UI actions must never wait on Git or
+    // filesystem work in the main thread.
+    auto *process = new QProcess(this);
+    process->setProgram(m_executablePath);
+    process->setArguments(m_extraArgs);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    auto *timeout = new QTimer(process);
+    timeout->setSingleShot(true);
+    timeout->setInterval(30000);
+
+    connect(process, &QProcess::started, process, [process, timeout, command]() {
+        process->write(serialise(command));
+        process->closeWriteChannel();
+        timeout->start();
     });
+    connect(process, &QProcess::errorOccurred, this,
+            [process, timeout, onError](QProcess::ProcessError error) {
+        if (process->property("completed").toBool() ||
+            error != QProcess::FailedToStart) {
+            return;
+        }
+        process->setProperty("completed", true);
+        timeout->stop();
+        if (onError) {
+            onError(process->errorString());
+        }
+        process->deleteLater();
+    });
+    connect(timeout, &QTimer::timeout, this, [process, onError]() {
+        if (process->property("completed").toBool()) {
+            return;
+        }
+        process->setProperty("completed", true);
+        process->kill();
+        if (onError) {
+            onError(QStringLiteral("Core did not finish in time."));
+        }
+        process->deleteLater();
+    });
+    connect(process,
+            QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this,
+            [process, timeout, onCompleted, onError](int, QProcess::ExitStatus) {
+        if (process->property("completed").toBool()) {
+            return;
+        }
+        process->setProperty("completed", true);
+        timeout->stop();
+
+        const QByteArray output = process->readAllStandardOutput();
+        const QByteArray errors = process->readAllStandardError();
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(output, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            if (onError) {
+                const QString message = QString::fromUtf8(errors).trimmed();
+                onError(message.isEmpty()
+                            ? QStringLiteral("Core returned invalid JSON.")
+                            : message);
+            }
+        } else if (onCompleted) {
+            onCompleted(fromJson(document.object()));
+        }
+        process->deleteLater();
+    });
+
+    process->start();
 }
 
 void CoreClient::writeCommand(const QVariantMap &command)

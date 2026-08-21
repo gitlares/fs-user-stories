@@ -52,7 +52,7 @@ agents, and uses Git only when the user chooses to share a project.
 > FS User Stories does not manage your team, your dates, or your company. It only
 > makes clear what needs to be built.
 
-## Version 1.0.6 (Build 7)
+## Version 1.0.7 (Build 8)
 
 FS User Stories is a functional product, not a static UI
 prototype. It includes a signed and notarized Apple Silicon application with the
@@ -114,7 +114,7 @@ The app runs a loopback-only MCP server while it is open. The MCP screen shows
 the live status, URL, port, and connection instructions; the same status is also
 visible in the app footer and menu bar.
 
-Version 1.0.6 exposes 27 tools covering the product's real operations:
+Version 1.0.7 exposes 27 tools covering the product's real operations:
 
 - Describe the application and list or inspect projects.
 - Create projects and inspect repository status.
@@ -182,7 +182,7 @@ Back up important project data and
 
 ## Road to Version 1
 
-Version 1.0.6 validates the local-first workflow, Git sharing, and local MCP
+Version 1.0.7 validates the local-first workflow, Git sharing, and local MCP
 across the shared Rust core and the platform interfaces.
 
 **Version 1 is planned as the public product release:**

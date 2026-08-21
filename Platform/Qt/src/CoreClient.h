@@ -33,10 +33,11 @@ public:
     /// Synchronous JSON request. For UI workflows prefer the async variant.
     QVariantMap execute(const QVariantMap &command);
 
-    /// Asynchronous JSON request. The reply delivers a parsed map with the
-    /// fields `ok` (bool), `result` (QVariant) and `error` (QVariantMap).
+    /// Asynchronous JSON request. A valid core reply is delivered through
+    /// onCompleted, including domain errors (`ok == false`). onError is only
+    /// used when the core cannot be started, times out, or returns invalid JSON.
     void executeAsync(const QVariantMap &command,
-                      std::function<void(QVariantMap)> onSuccess,
+                      std::function<void(QVariantMap)> onCompleted,
                       std::function<void(QString)> onError);
 
     /// Attempts to start the persistent core process. Safe to call multiple times.

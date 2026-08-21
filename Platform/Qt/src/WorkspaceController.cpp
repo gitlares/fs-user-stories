@@ -514,7 +514,8 @@ bool WorkspaceController::revealAttachment(const QString &relativePath)
     }
 #ifdef Q_OS_WIN
     if (!QProcess::startDetached(QStringLiteral("explorer.exe"),
-                                 {QStringLiteral("/select,"), QDir::toNativeSeparators(path)})) {
+                                 {QStringLiteral("/select,%1")
+                                      .arg(QDir::toNativeSeparators(path))})) {
         setError(tr("The attachment could not be shown in File Explorer."));
         return false;
     }
@@ -542,17 +543,16 @@ void WorkspaceController::openAttachment(const QString &storyId,
     }
 
     if (currentProjectHasRemote()) {
-        synchronizeCurrentProject(false);
-        if (!m_lastError.isEmpty()) {
-            return;
-        }
-    }
-    load();
-    if (!m_lastError.isEmpty()) {
-        return;
-    }
-    relativePath = attachmentRelativePath(storyId, attachmentId);
-    if (!relativePath.isEmpty() && revealAttachment(relativePath)) {
+        synchronizeCurrentProject(false, [this, storyId, attachmentId](bool succeeded) {
+            if (!succeeded) {
+                return;
+            }
+            const QString restoredPath = attachmentRelativePath(storyId, attachmentId);
+            if (!restoredPath.isEmpty() && revealAttachment(restoredPath)) {
+                return;
+            }
+            setError(tr("The attachment could not be restored from the shared repository."));
+        });
         return;
     }
     setError(tr("The attachment could not be restored from the shared repository."));
@@ -591,48 +591,70 @@ void WorkspaceController::synchronize()
     synchronizeCurrentProject(true);
 }
 
-void WorkspaceController::synchronizeCurrentProject(bool announceCompletion)
+void WorkspaceController::synchronizeCurrentProject(bool announceCompletion,
+                                                    std::function<void(bool)> completion)
 {
     if (!m_client || m_currentProjectId.isEmpty()) {
+        if (completion) {
+            completion(false);
+        }
         return;
     }
     if (m_accessToken.isEmpty()) {
         m_accessToken = CredentialStore::readGitHubToken();
     }
     setBusy(true);
-    const QVariantMap reply = runCommand({
+    const QVariantMap command = {
         {"command", "synchronize_stored_project"},
         {"database_path", m_databasePath},
         {"attachments_root", m_attachmentsRoot},
         {"project_id", m_currentProjectId},
         {"access_token", m_accessToken.isEmpty() ? QVariant() : QVariant(m_accessToken)},
-    });
-    setBusy(false);
-    if (!reply.value("ok").toBool()) {
-        const QVariantMap errorValue = reply.value("error").toMap();
-        if (errorValue.value("code").toString() == QLatin1String("sync_conflicts")) {
-            const QVariantList conflicts =
-                errorValue.value("details").toMap().value("conflicts").toList();
-            m_pendingSyncConflicts = conflicts;
-            emit pendingSyncConflictsChanged();
-            emit syncConflicts(conflicts);
-            return;
+    };
+    m_client->executeAsync(
+        command,
+        [this, announceCompletion, completion](const QVariantMap &reply) {
+            setBusy(false);
+            if (!reply.value("ok").toBool()) {
+                const QVariantMap errorValue = reply.value("error").toMap();
+                if (errorValue.value("code").toString() == QLatin1String("sync_conflicts")) {
+                    const QVariantList conflicts =
+                        errorValue.value("details").toMap().value("conflicts").toList();
+                    m_pendingSyncConflicts = conflicts;
+                    emit pendingSyncConflictsChanged();
+                    emit syncConflicts(conflicts);
+                } else {
+                    setError(errorValue.value("message").toString());
+                }
+                if (completion) {
+                    completion(false);
+                }
+                return;
+            }
+            if (!m_pendingSyncConflicts.isEmpty()) {
+                m_pendingSyncConflicts.clear();
+                emit pendingSyncConflictsChanged();
+            }
+            const QVariantMap project = reply.value("result").toMap().value("project").toMap();
+            if (!project.isEmpty()) {
+                applyProject(project);
+            }
+            if (announceCompletion) {
+                emit info(tr("Project synchronized."));
+            }
+            refreshCurrent();
+            if (completion) {
+                completion(true);
+            }
+        },
+        [this, completion](const QString &message) {
+            setBusy(false);
+            setError(message);
+            if (completion) {
+                completion(false);
+            }
         }
-        setError(errorValue.value("message").toString());
-        return;
-    }
-    if (!m_pendingSyncConflicts.isEmpty()) {
-        m_pendingSyncConflicts.clear();
-        emit pendingSyncConflictsChanged();
-    }
-    const QVariantMap project = reply.value("result").toMap().value("project").toMap();
-    if (!project.isEmpty()) {
-        applyProject(project);
-    }
-    if (announceCompletion) {
-        emit info(tr("Project synchronized."));
-    }
-    refreshCurrent();
+    );
 }
 
 bool WorkspaceController::resolveSynchronization(const QVariantList &resolutions)
