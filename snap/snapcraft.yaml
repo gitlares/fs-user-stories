@@ -1,18 +1,22 @@
 name: fs-user-stories
 title: FS User Stories
 version: '1.0.8'
-summary: Plan, share and sync user stories with Git
+summary: Write clear user stories and acceptance criteria, locally
 description: |
-  FS User Stories is a focused desktop workspace for product teams. Create
-  stories, acceptance criteria, profiles and attachments in one local project,
-  then share the project through Git without a hosted database or account.
+  FS User Stories helps product owners, developers and small teams turn product
+  requirements into clear, structured user stories without the complexity of a
+  full project-management system.
 
-  The Linux application uses the same Rust core as the macOS application and
-  the Qt/QML interface is designed to remain fast and usable offline. Changes
-  are synchronized through the configured Git remote and conflicts are reported
-  instead of silently overwriting work.
+  Organize stories by project and user profile, write the goal and benefit,
+  define acceptance criteria, add notes and attachments, and track each story
+  as a draft, active or completed item. Search and filter the workspace when you
+  need to find a requirement quickly.
 
-  This snap is the x86_64 Linux build of FS User Stories 1.0.8.
+  Your workspace stays on your computer and works offline. No FS User Stories
+  account, subscription or mandatory cloud service is required. Teams can
+  optionally share and synchronize a project through a private Git repository.
+  The app also exposes a local MCP endpoint so compatible coding agents can work
+  with the same stories and acceptance criteria.
 website: https://github.com/gitlares/fs-user-stories
 issues: https://github.com/gitlares/fs-user-stories/issues
 source-code: https://github.com/gitlares/fs-user-stories
