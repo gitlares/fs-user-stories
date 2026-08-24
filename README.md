@@ -172,10 +172,12 @@ although a dedicated repository remains the clearest choice for a team.
 
 ## Install
 
-The native macOS edition is distributed through the
-[Mac App Store](https://apps.apple.com/app/id6801671870). Linux x64 is available
-as a [Snap](https://snapcraft.io/fs-user-stories) or a portable
-[AppImage](https://github.com/gitlares/fs-user-stories/releases/download/v1.0.8/FSUserStories-1.0.8-x86_64.AppImage).
+- **Linux x86_64 — direct download:** [FS User Stories 1.0.8 AppImage](https://github.com/gitlares/fs-user-stories/releases/download/v1.0.8/FSUserStories-1.0.8-x86_64.AppImage)
+- **Linux x86_64 — store:** [Install from the Snap Store](https://snapcraft.io/fs-user-stories)
+- **macOS Apple Silicon:** [Buy on the Mac App Store](https://apps.apple.com/app/id6801671870)
+
+The AppImage binary is hosted in the
+[latest GitHub release](https://github.com/gitlares/fs-user-stories/releases/latest).
 Windows remains a source-build and contributor-testing target.
 
 > **Windows and Linux still need contributors.** Linux 1.0.8 is now packaged
