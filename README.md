@@ -172,17 +172,17 @@ although a dedicated repository remains the clearest choice for a team.
 
 ## Install
 
-The end-user macOS edition is distributed through the
-[Mac App Store](https://apps.apple.com/app/id6801671870). Windows and Linux are
-currently source-build targets; their installers and AppImages are deliberately
-not committed to this repository or published as releases yet.
+The native macOS edition is distributed through the
+[Mac App Store](https://apps.apple.com/app/id6801671870). Linux x64 is available
+as a [Snap](https://snapcraft.io/fs-user-stories) or a portable
+[AppImage](https://github.com/gitlares/fs-user-stories/releases/download/v1.0.8/FSUserStories-1.0.8-x86_64.AppImage).
+Windows remains a source-build and contributor-testing target.
 
-> **Windows and Linux need contributors.** Their shared Qt application builds
-> from the same Rust core and Windows is continuously compiled and smoke-tested,
-> but we do not yet consider either edition ready for general users. We welcome
-> help compiling them on more machines, testing complete workflows, reporting
-> reproducible problems, and contributing fixes. Start with the one-command
-> build instructions below and share results through
+> **Windows and Linux still need contributors.** Linux 1.0.8 is now packaged
+> and has passed clean Ubuntu 22.04 dependency, launch, core, and MCP checks.
+> Windows is continuously compiled and smoke-tested, but we do not yet consider
+> either Qt edition as mature as the native macOS edition. We welcome complete
+> workflow testing, reproducible reports, and fixes through
 > [GitHub Issues](https://github.com/gitlares/fs-user-stories/issues).
 
 Back up important project data and
@@ -203,9 +203,10 @@ server across the shared Rust core and platform interfaces.
   installer, and passes an automated installation smoke test. It is available
   for source builds and contributor testing, but is not yet considered ready
   for general distribution.
-- **Linux x64:** the Qt edition shares the same core and project format and can
-  be built from source. Broader distribution testing and packaging validation
-  are still in progress.
+- **Linux x64:** version 1.0.8 is available from the Snap Store and as an
+  AppImage. Both packages include the Qt runtime and Rust core and were tested
+  on Magnolia; the AppImage was additionally verified on clean Ubuntu 22.04.
+  Broader real-world testing is welcome.
 
 The product promise is the same on every platform: local data, no FS User
 Stories account, no mandatory cloud, optional Git sharing, automatic repository
@@ -276,8 +277,9 @@ user interface remains fully native to macOS.
 
 Source builds are available for macOS, Windows x64, and Linux x64. They do not
 need an Apple Developer account, GitHub token, or FS User Stories account. The
-repository contains source and build scripts only: no Windows, Linux, or macOS
-binary is published from this repository.
+Linux AppImage is attached to the v1.0.8 GitHub Release; Windows binaries remain
+limited to CI artifacts and collaborator testing, while macOS is distributed
+through the Mac App Store.
 
 ### macOS (Apple Silicon)
 
