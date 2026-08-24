@@ -2,7 +2,7 @@
 # Builds the FS User Stories Qt front-end and bundles an AppImage.
 #
 # Requirements (Ubuntu/Debian):
-#   apt install build-essential cmake ninja-build pkg-config libsecret-1-dev musl-tools
+#   apt install build-essential cmake ninja-build pkg-config libsecret-1-dev
 #   Install a Qt 6.5+ desktop kit, then set FS_USER_STORIES_QT_ROOT to it.
 #   cargo install --locked cargo-bundle  # optional
 #   wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
@@ -47,13 +47,8 @@ elif ! command -v qmake6 >/dev/null 2>&1 && \
 fi
 
 # 1. Build the Rust core for the running Linux target.
-FS_USER_STORIES_TARGET=${FS_USER_STORIES_TARGET:-x86_64-unknown-linux-musl}
+FS_USER_STORIES_TARGET=${FS_USER_STORIES_TARGET:-x86_64-unknown-linux-gnu}
 export FS_USER_STORIES_TARGET
-if [ "$FS_USER_STORIES_TARGET" = "x86_64-unknown-linux-musl" ] && \
-   ! command -v musl-gcc >/dev/null 2>&1; then
-    echo "musl-tools is required for the portable AppImage core" >&2
-    exit 1
-fi
 "$(dirname "$0")/build-core-linux.sh"
 
 # 2. Configure & build the Qt app.
@@ -90,6 +85,41 @@ if [ -z "$XCB_CURSOR_LIBRARY" ]; then
     exit 1
 fi
 cp -L "$XCB_CURSOR_LIBRARY" "$APP_DIR/usr/lib/libxcb-cursor.so.0"
+
+# linuxdeploy deliberately excludes parts of the OpenGL loader stack because
+# they are commonly supplied by the host. That makes the resulting AppImage
+# fail on a minimal installation before it can reach the system's actual GPU
+# driver. Bundle the ABI-stable loader libraries while leaving vendor drivers
+# (Mesa/NVIDIA/AMD) to the operating system.
+for GRAPHICS_LIBRARY in \
+    libOpenGL.so.0 \
+    libGL.so.1 \
+    libGLX.so.0 \
+    libEGL.so.1 \
+    libGLdispatch.so.0 \
+    libfontconfig.so.1 \
+    libfreetype.so.6 \
+    libexpat.so.1 \
+    libX11.so.6 \
+    libX11-xcb.so.1 \
+    libxcb.so.1
+do
+    GRAPHICS_LIBRARY_PATH=$(ldconfig -p 2>/dev/null | \
+        awk -v library="$GRAPHICS_LIBRARY" '$1 == library { print $NF; exit }')
+    if [ -z "$GRAPHICS_LIBRARY_PATH" ]; then
+        echo "$GRAPHICS_LIBRARY is required to build the AppImage" >&2
+        exit 1
+    fi
+    cp -L "$GRAPHICS_LIBRARY_PATH" "$APP_DIR/usr/lib/$GRAPHICS_LIBRARY"
+done
+
+# libfontconfig also needs its runtime configuration, not just the shared
+# library. Keep it inside the AppImage so a minimal desktop does not have to
+# provide /etc/fonts.
+if [ -d /etc/fonts ]; then
+    mkdir -p "$APP_DIR/usr/etc"
+    cp -R /etc/fonts "$APP_DIR/usr/etc/fonts"
+fi
 
 # Bundle the Material Symbols icon font next to the binary so main.cpp can
 # QFontDatabase::addApplicationFont(applicationDirPath() + "/resources/fonts/...").

@@ -11,6 +11,20 @@ set -eu
 PROJECT_DIR="${CRAFT_PART_SRC:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}"
 BUILD_DIR="${CRAFT_PART_BUILD:-$PROJECT_DIR/.snap-build}"
 INSTALL_DIR="${CRAFT_PART_INSTALL:-$PROJECT_DIR/.snap-install}"
+
+# Destructive builds on Magnolia run inside Snapcraft's sanitized environment,
+# which omits the user-installed Rust toolchain from PATH.
+if ! command -v rustup >/dev/null 2>&1 && \
+   [ -x /home/dlares/.cargo/bin/rustup ]; then
+    PATH="/home/dlares/.cargo/bin:$PATH"
+    export PATH
+fi
+
+if ! command -v rustup >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+    echo "A current rustup-managed Rust toolchain is required" >&2
+    exit 1
+fi
+
 QT_ROOT="${FS_USER_STORIES_QT_ROOT:-/home/dlares/Qt/6.7.3/gcc_64}"
 QT_QMAKE="$QT_ROOT/bin/qmake6"
 
@@ -33,8 +47,11 @@ cmake -S "$PROJECT_DIR/Platform/Qt" -B "$QT_BUILD_DIR" -G Ninja \
 cmake --build "$QT_BUILD_DIR" --parallel
 
 rm -rf "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/usr/bin" "$INSTALL_DIR/usr/lib/fs-user-stories/core" \
+mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/usr/bin" "$INSTALL_DIR/usr/lib/fs-user-stories/core" \
     "$INSTALL_DIR/usr/share/applications" "$INSTALL_DIR/usr/share/icons/hicolor/256x256/apps"
+
+cp "$PROJECT_DIR/snap/local/fs-user-stories.wrapper" \
+    "$INSTALL_DIR/bin/fs-user-stories.wrapper"
 
 cp "$PROJECT_DIR/Platform/Qt/core-bundle/fs-user-stories-core" \
     "$INSTALL_DIR/usr/lib/fs-user-stories/core/fs-user-stories-core"
@@ -67,6 +84,29 @@ else
     cp -a "$QT_BUILD_DIR/fs-user-stories" "$INSTALL_DIR/usr/bin/fs-user-stories"
 fi
 
+# linuxdeploy deliberately excludes libraries it expects from the host. A
+# strictly confined snap cannot see those host libraries, so include the
+# graphics/font/X11 baseline explicitly.
+for LIBRARY_NAME in \
+    libEGL.so.1 \
+    libGL.so.1 \
+    libGLX.so.0 \
+    libGLdispatch.so.0 \
+    libOpenGL.so.0 \
+    libX11.so.6 \
+    libX11-xcb.so.1 \
+    libfontconfig.so.1 \
+    libxcb.so.1
+do
+    LIBRARY_PATH=$(ldconfig -p 2>/dev/null | \
+        awk -v name="$LIBRARY_NAME" '$1 == name { print $NF; exit }')
+    if [ -z "$LIBRARY_PATH" ]; then
+        echo "Required snap runtime library was not found: $LIBRARY_NAME" >&2
+        exit 1
+    fi
+    cp -L "$LIBRARY_PATH" "$INSTALL_DIR/usr/lib/$LIBRARY_NAME"
+done
+
 # The application loads these fonts and its icon relative to the executable.
 mkdir -p "$INSTALL_DIR/usr/bin/resources/fonts"
 cp "$PROJECT_DIR/Platform/Qt/resources/fonts/MaterialSymbolsOutlined-Variable.ttf" \
@@ -76,5 +116,6 @@ cp "$PROJECT_DIR/Platform/Qt/resources/fonts/InterVariable.ttf" \
 cp "$PROJECT_DIR/Design/AppIcon-master.png" \
     "$INSTALL_DIR/usr/bin/resources/app-icon.png"
 
-chmod 755 "$INSTALL_DIR/usr/bin/fs-user-stories" \
+chmod 755 "$INSTALL_DIR/bin/fs-user-stories.wrapper" \
+    "$INSTALL_DIR/usr/bin/fs-user-stories" \
     "$INSTALL_DIR/usr/lib/fs-user-stories/core/fs-user-stories-core"

@@ -7,5 +7,6 @@ export FS_USER_STORIES_CORE="$HERE/usr/lib/fs-user-stories/core/fs-user-stories-
 export LD_LIBRARY_PATH="$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
 export QML2_IMPORT_PATH="$HERE/usr/qml:${QML2_IMPORT_PATH:-}"
 export QT_PLUGIN_PATH="$HERE/usr/plugins:${QT_PLUGIN_PATH:-}"
+export FONTCONFIG_PATH="$HERE/usr/etc/fonts"
 export QSG_RENDER_LOOP=threaded
 exec "$HERE/usr/bin/fs-user-stories" "$@"

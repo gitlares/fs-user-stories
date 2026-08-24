@@ -23,7 +23,6 @@ license: MIT
 grade: stable
 confinement: strict
 base: core24
-build-base: core24
 icon: snap/gui/fs-user-stories.png
 platforms:
   amd64:
@@ -90,7 +89,7 @@ parts:
 
 apps:
   fs-user-stories:
-    command: snap/local/fs-user-stories.wrapper
+    command: bin/fs-user-stories.wrapper
     desktop: usr/share/applications/fs-user-stories.desktop
     plugs:
       - desktop
