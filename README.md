@@ -57,9 +57,9 @@ agents, and uses Git only when the user chooses to share a project.
 
 ## Version 1.0.8 (Build 9)
 
-FS User Stories is a functional product, not a static UI
-prototype. It includes a signed and notarized Apple Silicon application with the
-following capabilities.
+FS User Stories is a functional cross-platform product, not a static UI
+prototype. It includes a production macOS edition and Qt editions for Linux and
+Windows, all powered by the same Rust core and project format.
 
 ### Native macOS experience
 
@@ -275,10 +275,10 @@ The codebase separates the portable product core from the native macOS shell:
   Markdown transfer, managed attachments, Git/GitHub synchronization,
   invitations, conflict handling, scheduling policy, and MCP server/tools.
 
-The Rust core is compiled from the source under `Core` and bundled into the app
+The Rust core is compiled from the source under `Core` and bundled into each app
 as a self-contained executable. There is one SQLite database and no alternate
-Swift backend. Rust is the portable basis for future platforms while the current
-user interface remains fully native to macOS.
+platform backend. SwiftUI provides the native macOS interface, while Qt/QML
+provides the Windows and Linux interfaces.
 
 ## Build from source
 
@@ -485,3 +485,8 @@ FS User Stories is distributed under the [MIT License](./LICENSE). It permits
 free and paid distributions, including a future commercial iOS edition. See
 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) for bundled dependency
 licenses.
+
+## Another project by Daniel Lares
+
+[FS PDF Compressor](https://github.com/gitlares/fs-pdf-compressor) provides fast
+and simple local PDF compression for macOS and Linux: drag, drop, done.
