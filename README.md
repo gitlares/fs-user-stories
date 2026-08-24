@@ -13,6 +13,8 @@
 <p align="center">
   <a href="https://gitlares.github.io/fs-user-stories/">Website</a> ·
   <a href="https://apps.apple.com/app/id6801671870">Mac App Store</a> ·
+  <a href="https://github.com/gitlares/fs-user-stories/releases/download/v1.0.8/FSUserStories-1.0.8-x86_64.AppImage">Linux AppImage</a> ·
+  <a href="https://snapcraft.io/fs-user-stories">Snap Store</a> ·
   <a href="https://www.paypal.com/donate/?hosted_button_id=7RDCBR3QXXEMJ">♥ Support</a> ·
   <a href="https://github.com/gitlares/fs-user-stories/issues">Issues</a> ·
   <a href="./LICENSE">MIT License</a>
